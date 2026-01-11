@@ -57,6 +57,10 @@
             <v-icon :start="!mobile">mdi-camera</v-icon>
             <span v-if="!mobile">Cameras</span>
           </v-tab>
+          <v-tab value="tools">
+            <v-icon :start="!mobile">mdi-tools</v-icon>
+            <span v-if="!mobile">Tools</span>
+          </v-tab>
         </v-tabs>
 
         <v-window v-model="activeTab">
@@ -79,6 +83,11 @@
           <v-window-item value="cameras">
             <CamerasTab ref="camerasRef" />
           </v-window-item>
+
+          <!-- Tools Tab -->
+          <v-window-item value="tools">
+            <ToolsTab ref="toolsRef" />
+          </v-window-item>
         </v-window>
       </v-container>
     </v-main>
@@ -94,6 +103,7 @@ import ChemicalBatchesTab from '@/components/tabs/ChemicalBatchesTab.vue';
 import FilmRollsTab from '@/components/tabs/FilmRollsTab.vue';
 import FilmStocksTab from '@/components/tabs/FilmStocksTab.vue';
 import CamerasTab from '@/components/tabs/CamerasTab.vue';
+import ToolsTab from '@/components/tabs/ToolsTab.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -111,6 +121,7 @@ const chemicalBatchesRef = ref();
 const filmRollsRef = ref();
 const filmStocksRef = ref();
 const camerasRef = ref();
+const toolsRef = ref();
 
 // Refresh tab data when switching tabs
 watch(activeTab, (newTab) => {
@@ -126,6 +137,9 @@ watch(activeTab, (newTab) => {
       break;
     case 'cameras':
       camerasRef.value?.refresh();
+      break;
+    case 'tools':
+      toolsRef.value?.refresh();
       break;
   }
 });
