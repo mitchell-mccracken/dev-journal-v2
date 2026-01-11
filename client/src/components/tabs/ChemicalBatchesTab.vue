@@ -264,6 +264,17 @@ const fetchAllRollCounts = async () => {
   }
 };
 
+const getRollsHelper = async (batchId: string) => {
+  try {
+    const response = await chemicalBatchesApi.getRolls(batchId);
+    batchRolls.value[batchId] = response.data;
+    batchRollCounts.value[batchId] = response.data.length;
+  } catch (error) {
+    console.error('Failed to get rolls for batch:', error);
+    throw error;
+  }
+};
+
 const toggleExpand = async (batchId: string) => {
   // Toggle the expanded state
   expandedRows.value[batchId] = !expandedRows.value[batchId];
@@ -272,9 +283,7 @@ const toggleExpand = async (batchId: string) => {
   if (expandedRows.value[batchId] && !batchRolls.value[batchId]) {
     loadingRolls.value[batchId] = true;
     try {
-      const response = await chemicalBatchesApi.getRolls(batchId);
-      batchRolls.value[batchId] = response.data;
-      batchRollCounts.value[batchId] = response.data.length;
+      await getRollsHelper(batchId);
     } catch (err: any) {
       console.error('Failed to load rolls for batch:', err);
       batchRolls.value[batchId] = [];
@@ -375,7 +384,14 @@ const formatDate = (dateString: string) => {
 };
 
 // Expose refresh method for parent component
-const refresh = () => fetchBatches();
+const refresh = () => {
+  // if batches have expanded rows, re-fetch their rolls
+  batches.value
+    .filter(batch =>  !!expandedRows.value[batch._id])
+    .map(batch => getRollsHelper(batch._id));
+
+  return fetchBatches();
+};
 defineExpose({ refresh });
 
 onMounted(fetchBatches);
