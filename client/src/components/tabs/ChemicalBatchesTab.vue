@@ -1,10 +1,10 @@
 <template>
   <div>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h5">Chemical Batches</h2>
-      <v-btn color="primary" @click="openCreateDialog">
+      <h2 :class="mobile ? 'text-h6' : 'text-h5'">Chemical Batches</h2>
+      <v-btn color="primary" :size="mobile ? 'small' : 'default'" @click="openCreateDialog">
         <v-icon start>mdi-plus</v-icon>
-        New Batch
+        {{ mobile ? 'New' : 'New Batch' }}
       </v-btn>
     </div>
 
@@ -26,6 +26,89 @@
       </v-btn>
     </v-card>
 
+    <!-- Mobile Card Layout -->
+    <div v-else-if="mobile">
+      <v-card v-for="batch in batches" :key="batch._id" class="mb-3">
+        <v-card-item>
+          <template #title>
+            <div class="d-flex align-center justify-space-between">
+              <span>{{ batch.name }}</span>
+              <div>
+                <v-btn icon size="small" variant="text" @click="openEditDialog(batch)">
+                  <v-icon size="small">mdi-pencil</v-icon>
+                </v-btn>
+                <v-btn icon size="small" variant="text" color="error" @click="confirmDelete(batch)">
+                  <v-icon size="small">mdi-delete</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </template>
+          <template #subtitle>
+            <span v-if="batch.description">{{ batch.description }}</span>
+          </template>
+        </v-card-item>
+        <v-card-text class="pt-0">
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <v-chip size="small" :color="getTypeColor(batch.chemicalType)">
+              {{ batch.chemicalType }}
+            </v-chip>
+            <v-chip size="small" :color="getStatusColor(batch.status)">
+              {{ batch.status }}
+            </v-chip>
+            <v-chip size="small" color="info">
+              {{ batchRollCounts[batch._id] || 0 }} rolls
+            </v-chip>
+          </div>
+          <div class="text-caption text-grey">Created: {{ formatDate(batch.createdAt) }}</div>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn 
+            variant="text" 
+            size="small"
+            @click="toggleExpand(batch._id)"
+          >
+            <v-icon start>{{ expandedRows[batch._id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+            {{ expandedRows[batch._id] ? 'Hide Rolls' : 'Show Rolls' }}
+          </v-btn>
+        </v-card-actions>
+        
+        <!-- Expanded Rolls (Mobile) -->
+        <v-expand-transition>
+          <div v-if="expandedRows[batch._id]">
+            <v-divider />
+            <v-card-text>
+              <div v-if="loadingRolls[batch._id]" class="text-center py-4">
+                <v-progress-circular indeterminate size="24" />
+              </div>
+              <div v-else-if="!batchRolls[batch._id]?.length" class="text-grey text-center py-2">
+                No rolls developed yet.
+              </div>
+              <v-list v-else density="compact" class="pa-0">
+                <v-list-item 
+                  v-for="roll in batchRolls[batch._id]" 
+                  :key="roll._id"
+                  class="px-0"
+                >
+                  <v-list-item-title class="text-body-2">
+                    {{ roll.filmStock?.make }} {{ roll.filmStock?.name }}
+                  </v-list-item-title>
+                  <v-list-item-subtitle>
+                    {{ roll.camera ? `${roll.camera.make} ${roll.camera.name}` : 'No camera' }}
+                  </v-list-item-subtitle>
+                  <template #append>
+                    <v-chip size="x-small" :color="getRollStatusColor(roll.status)">
+                      {{ roll.status }}
+                    </v-chip>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-card-text>
+          </div>
+        </v-expand-transition>
+      </v-card>
+    </div>
+
+    <!-- Desktop Table Layout -->
     <v-card v-else>
       <v-table>
         <thead>
@@ -194,8 +277,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
+import { useDisplay } from 'vuetify';
 import { chemicalBatchesApi, type ChemicalBatch, type ChemicalBatchInput, type FilmRoll } from '@/services/api';
+
+const display = useDisplay();
+const mobile = computed(() => display.smAndDown.value);
 
 const batches = ref<ChemicalBatch[]>([]);
 

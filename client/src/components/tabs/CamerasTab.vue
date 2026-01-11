@@ -1,10 +1,10 @@
 <template>
   <div>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h5">Cameras</h2>
-      <v-btn color="primary" @click="openCreateDialog">
+      <h2 :class="mobile ? 'text-h6' : 'text-h5'">Cameras</h2>
+      <v-btn color="primary" :size="mobile ? 'small' : 'default'" @click="openCreateDialog">
         <v-icon start>mdi-plus</v-icon>
-        New Camera
+        {{ mobile ? 'New' : 'New Camera' }}
       </v-btn>
     </div>
 
@@ -26,6 +26,38 @@
       </v-btn>
     </v-card>
 
+    <!-- Mobile Card Layout -->
+    <div v-else-if="mobile">
+      <v-card v-for="camera in cameras" :key="camera._id" class="mb-3">
+        <v-card-item>
+          <template #title>
+            <div class="d-flex align-center justify-space-between">
+              <span>{{ camera.make }} {{ camera.name }}</span>
+              <div>
+                <v-btn icon size="small" variant="text" @click="openEditDialog(camera)">
+                  <v-icon size="small">mdi-pencil</v-icon>
+                </v-btn>
+                <v-btn icon size="small" variant="text" color="error" @click="confirmDelete(camera)">
+                  <v-icon size="small">mdi-delete</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </template>
+        </v-card-item>
+        <v-card-text class="pt-0">
+          <div class="d-flex flex-wrap gap-2">
+            <v-chip v-if="camera.format" size="small" variant="outlined">
+              {{ camera.format }}
+            </v-chip>
+          </div>
+          <div v-if="camera.notes" class="text-caption text-grey mt-2">
+            {{ camera.notes }}
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
+    <!-- Desktop Table Layout -->
     <v-table v-else>
       <thead>
         <tr>
@@ -114,8 +146,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
+import { useDisplay } from 'vuetify';
 import { camerasApi, type Camera, type CameraInput } from '@/services/api';
+
+const display = useDisplay();
+const mobile = computed(() => display.smAndDown.value);
 
 const cameras = ref<Camera[]>([]);
 const loading = ref(true);
