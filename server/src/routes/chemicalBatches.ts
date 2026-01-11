@@ -56,7 +56,7 @@ router.get('/:id/rolls', async (req: AuthRequest, res: Response): Promise<void> 
     })
       .populate('filmStock')
       .populate('camera')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: 1 });
 
     res.json(rolls);
   } catch (error) {
