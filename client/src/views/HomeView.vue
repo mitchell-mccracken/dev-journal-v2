@@ -1,6 +1,6 @@
 <template>
   <v-app>
-    <v-app-bar color="primary" prominent>
+    <v-app-bar color="primary" :prominent="!mobile">
       <v-app-bar-title>Film Journal</v-app-bar-title>
       
       <v-spacer />
@@ -33,23 +33,33 @@
     </v-app-bar>
 
     <v-main>
-      <v-container>
-        <v-tabs v-model="activeTab" color="primary" class="mb-4">
+      <v-container :class="{ 'pa-2': mobile }">
+        <v-tabs 
+          v-model="activeTab" 
+          color="primary" 
+          class="mb-4"
+          :grow="mobile"
+          :show-arrows="mobile"
+        >
           <v-tab value="chemical-batches">
-            <v-icon start>mdi-flask</v-icon>
-            Chemical Batches
+            <v-icon :start="!mobile">mdi-flask</v-icon>
+            <span v-if="!mobile">Chemical Batches</span>
           </v-tab>
           <v-tab value="film-rolls">
-            <v-icon start>mdi-filmstrip</v-icon>
-            Film Rolls
+            <v-icon :start="!mobile">mdi-filmstrip</v-icon>
+            <span v-if="!mobile">Film Rolls</span>
           </v-tab>
           <v-tab value="film-stocks">
-            <v-icon start>mdi-filmstrip-box</v-icon>
-            Film Stocks
+            <v-icon :start="!mobile">mdi-filmstrip-box</v-icon>
+            <span v-if="!mobile">Film Stocks</span>
           </v-tab>
           <v-tab value="cameras">
-            <v-icon start>mdi-camera</v-icon>
-            Cameras
+            <v-icon :start="!mobile">mdi-camera</v-icon>
+            <span v-if="!mobile">Cameras</span>
+          </v-tab>
+          <v-tab value="tools">
+            <v-icon :start="!mobile">mdi-tools</v-icon>
+            <span v-if="!mobile">Tools</span>
           </v-tab>
         </v-tabs>
 
@@ -73,6 +83,11 @@
           <v-window-item value="cameras">
             <CamerasTab ref="camerasRef" />
           </v-window-item>
+
+          <!-- Tools Tab -->
+          <v-window-item value="tools">
+            <ToolsTab ref="toolsRef" />
+          </v-window-item>
         </v-window>
       </v-container>
     </v-main>
@@ -80,27 +95,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useTheme } from 'vuetify';
+import { useTheme, useDisplay } from 'vuetify';
 import { useAuthStore } from '@/stores/auth';
 import ChemicalBatchesTab from '@/components/tabs/ChemicalBatchesTab.vue';
 import FilmRollsTab from '@/components/tabs/FilmRollsTab.vue';
 import FilmStocksTab from '@/components/tabs/FilmStocksTab.vue';
 import CamerasTab from '@/components/tabs/CamerasTab.vue';
+import ToolsTab from '@/components/tabs/ToolsTab.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const theme = useTheme();
+const display = useDisplay();
 
 const activeTab = ref('chemical-batches');
 const isDark = ref(theme.global.current.value.dark);
+
+// Mobile detection
+const mobile = computed(() => display.smAndDown.value);
 
 // Tab refs for refreshing data
 const chemicalBatchesRef = ref();
 const filmRollsRef = ref();
 const filmStocksRef = ref();
 const camerasRef = ref();
+const toolsRef = ref();
 
 // Refresh tab data when switching tabs
 watch(activeTab, (newTab) => {
@@ -116,6 +137,9 @@ watch(activeTab, (newTab) => {
       break;
     case 'cameras':
       camerasRef.value?.refresh();
+      break;
+    case 'tools':
+      toolsRef.value?.refresh();
       break;
   }
 });

@@ -1,10 +1,10 @@
 <template>
   <div>
     <div class="d-flex justify-space-between align-center mb-4">
-      <h2 class="text-h5">Film Stocks</h2>
-      <v-btn color="primary" @click="openCreateDialog">
+      <h2 :class="mobile ? 'text-h6' : 'text-h5'">Film Stocks</h2>
+      <v-btn color="primary" :size="mobile ? 'small' : 'default'" @click="openCreateDialog">
         <v-icon start>mdi-plus</v-icon>
-        New Film Stock
+        {{ mobile ? 'New' : 'New Film Stock' }}
       </v-btn>
     </div>
 
@@ -26,6 +26,41 @@
       </v-btn>
     </v-card>
 
+    <!-- Mobile Card Layout -->
+    <div v-else-if="mobile">
+      <v-card v-for="stock in stocks" :key="stock._id" class="mb-3">
+        <v-card-item>
+          <template #title>
+            <div class="d-flex align-center justify-space-between">
+              <span>{{ stock.make }} {{ stock.name }}</span>
+              <div>
+                <v-btn icon size="small" variant="text" @click="openEditDialog(stock)">
+                  <v-icon size="small">mdi-pencil</v-icon>
+                </v-btn>
+                <v-btn icon size="small" variant="text" color="error" @click="confirmDelete(stock)">
+                  <v-icon size="small">mdi-delete</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </template>
+        </v-card-item>
+        <v-card-text class="pt-0">
+          <div class="d-flex flex-wrap gap-2">
+            <v-chip v-if="stock.iso" size="small" variant="outlined">
+              ISO {{ stock.iso }}
+            </v-chip>
+            <v-chip v-if="stock.format" size="small" variant="outlined">
+              {{ stock.format }}
+            </v-chip>
+            <v-chip v-if="stock.type" size="small" :color="getTypeColor(stock.type)">
+              {{ stock.type }}
+            </v-chip>
+          </div>
+        </v-card-text>
+      </v-card>
+    </div>
+
+    <!-- Desktop Table Layout -->
     <v-table v-else>
       <thead>
         <tr>
@@ -128,8 +163,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
+import { useDisplay } from 'vuetify';
 import { filmStocksApi, type FilmStock, type FilmStockInput } from '@/services/api';
+
+const display = useDisplay();
+const mobile = computed(() => display.smAndDown.value);
 
 const stocks = ref<FilmStock[]>([]);
 const loading = ref(true);
