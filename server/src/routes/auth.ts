@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { User } from '../models';
 import { config } from '../config';
 import { authenticate, AuthRequest } from '../middleware/auth';
@@ -8,9 +8,10 @@ const router = Router();
 
 // Generate JWT token
 const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, config.jwtSecret, {
-    expiresIn: config.jwtExpiresIn,
-  });
+  const options: SignOptions = {
+    expiresIn: config.jwtExpiresIn as SignOptions['expiresIn'],
+  };
+  return jwt.sign({ userId }, config.jwtSecret, options);
 };
 
 // POST /api/auth/signup
