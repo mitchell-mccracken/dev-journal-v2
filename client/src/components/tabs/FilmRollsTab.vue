@@ -44,7 +44,8 @@
             </div>
           </template>
           <template #subtitle>
-            {{ roll.camera ? `${roll.camera.make} ${roll.camera.name}` : 'No camera' }}
+            <div>{{ roll.camera ? `${roll.camera.make} ${roll.camera.name}` : 'No camera' }}</div>
+            <div>Added: {{ formatDate(roll.createdAt) }}</div>
           </template>
         </v-card-item>
         <v-card-text class="pt-0">

@@ -88,12 +88,14 @@
                   v-for="roll in batchRolls[batch._id]" 
                   :key="roll._id"
                   class="px-0"
+                  lines="three"
                 >
                   <v-list-item-title class="text-body-2">
-                    {{ roll.filmStock?.make }} {{ roll.filmStock?.name }}
+                    {{ roll.filmStock?.make }} {{ roll.filmStock?.name }} - {{ roll.frameCount }}exp
                   </v-list-item-title>
-                  <v-list-item-subtitle>
-                    {{ roll.camera ? `${roll.camera.make} ${roll.camera.name}` : 'No camera' }}
+                  <v-list-item-subtitle class="text-wrap">
+                    <div>{{ roll.camera ? `${roll.camera.make} ${roll.camera.name}` : 'No camera' }}</div>
+                    <div>Added: {{ formatDate(roll.createdAt) }}</div>
                   </v-list-item-subtitle>
                   <template #append>
                     <v-chip size="x-small" :color="getRollStatusColor(roll.status)">
