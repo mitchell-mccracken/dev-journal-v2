@@ -107,13 +107,13 @@ const calculateTimes = () => {
   const blixTotalSeconds = baseBlixSeconds * coeficient;
   
   developerTime.minutes = Math.floor(developerTotalSeconds / 60);
-  developerTime.seconds = developerTotalSeconds % 60;
+  developerTime.seconds = Math.round(developerTotalSeconds % 60);
   
   blixTime.minutes = Math.floor(blixTotalSeconds / 60);
-  blixTime.seconds = blixTotalSeconds % 60;
+  blixTime.seconds = Math.round(blixTotalSeconds % 60);
   
   showResults.value = true;
-};
+}; 
 
 // Expose refresh method for consistency with other tabs
 const refresh = () => {
