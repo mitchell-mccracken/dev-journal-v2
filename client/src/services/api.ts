@@ -136,6 +136,49 @@ export interface FilmRollInput {
   notes?: string;
 }
 
+export interface GenericChemical {
+  _id: string;
+  name: string;
+  ratio?: string;
+  type: 'developer' | 'fixer' | 'stopBath' | 'other';
+  expirationDate?: Date;
+  notes?: string;
+  user: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GenericChemicalInput {
+  name: string;
+  ratio?: string;
+  type: 'developer' | 'fixer' | 'stopBath' | 'other';
+  expirationDate?: Date;
+  notes?: string;
+}
+
+// OneShotChemicalBatch types
+export interface OneShotChemicalBatch {
+  _id: string;
+  developer: GenericChemical;
+  fixer: GenericChemical;
+  stopBath?: GenericChemical;
+  filmRolls?: FilmRoll[];
+  developedAt?: string;
+  notes?: string;
+  user: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OneShotChemicalBatchInput {
+  developer: string;
+  fixer: string;
+  stopBath?: string;
+  filmRolls?: string[];
+  developedAt?: string;
+  notes?: string;
+}
+
 export const authApi = {
   login: (data: LoginData) => api.post<AuthResponse>('/auth/login', data),
   signup: (data: SignupData) => api.post<AuthResponse>('/auth/signup', data),
@@ -174,6 +217,22 @@ export const filmRollsApi = {
   create: (data: FilmRollInput) => api.post<FilmRoll>('/film-rolls', data),
   update: (id: string, data: FilmRollInput) => api.put<FilmRoll>(`/film-rolls/${id}`, data),
   delete: (id: string) => api.delete(`/film-rolls/${id}`),
+};
+
+export const genericChemicalsApi = {
+  getAll: () => api.get<{ data: GenericChemical[] }>('/generic-chemicals'),
+  getOne: (id: string) => api.get<{ data: GenericChemical }>(`/generic-chemicals/${id}`),
+  create: (data: GenericChemicalInput) => api.post<{ data: GenericChemical }>('/generic-chemicals', data),
+  update: (id: string, data: GenericChemicalInput) => api.put<{ data: GenericChemical }>(`/generic-chemicals/${id}`, data),
+  delete: (id: string) => api.delete(`/generic-chemicals/${id}`),
+};
+
+export const oneShotBatchesApi = {
+  getAll: () => api.get<{ data: OneShotChemicalBatch[] }>('/one-shot-batches'),
+  getOne: (id: string) => api.get<{ data: OneShotChemicalBatch }>(`/one-shot-batches/${id}`),
+  create: (data: OneShotChemicalBatchInput) => api.post<{ data: OneShotChemicalBatch }>('/one-shot-batches', data),
+  update: (id: string, data: OneShotChemicalBatchInput) => api.put<{ data: OneShotChemicalBatch }>(`/one-shot-batches/${id}`, data),
+  delete: (id: string) => api.delete(`/one-shot-batches/${id}`),
 };
 
 export default api;
