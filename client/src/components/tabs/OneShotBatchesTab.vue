@@ -222,62 +222,13 @@
     </v-dialog>
 
     <!-- Film Roll Creation Dialog -->
-    <v-dialog v-model="filmRollDialog" max-width="500">
-      <v-card>
-        <v-card-title>New Film Roll</v-card-title>
-        <v-card-text>
-          <v-form ref="filmRollFormRef" @submit.prevent="saveFilmRoll">
-            <v-select
-              v-model="filmRollForm.filmStock"
-              label="Film Stock *"
-              :items="filmStockOptions"
-              item-title="label"
-              item-value="value"
-              :rules="[(v: string) => !!v || 'Film stock is required']"
-              required
-              class="mb-2"
-            />
-            <v-select
-              v-model="filmRollForm.camera"
-              label="Camera"
-              :items="cameraOptions"
-              item-title="label"
-              item-value="value"
-              clearable
-              class="mb-2"
-            />
-            <v-text-field
-              v-model.number="filmRollForm.frameCount"
-              label="Frame Count"
-              type="number"
-              class="mb-2"
-            />
-            <v-select
-              v-model="filmRollForm.status"
-              label="Status"
-              :items="['loaded', 'shot', 'developed', 'scanned']"
-              class="mb-2"
-            />
-            <v-text-field
-              v-model="filmRollForm.dateLoaded"
-              label="Date Loaded"
-              type="date"
-              class="mb-2"
-            />
-            <v-textarea
-              v-model="filmRollForm.notes"
-              label="Notes"
-              rows="3"
-            />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="filmRollDialog = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="savingFilmRoll" @click="saveFilmRoll">Create</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <FilmRollDialog
+      v-model="filmRollDialog"
+      :film-stocks="filmStocks"
+      :cameras="cameras"
+      :saving="savingFilmRoll"
+      @save="saveFilmRoll"
+    />
 
     <!-- Snackbar -->
     <v-snackbar v-model="snackbar" :color="snackbarColor">
@@ -301,8 +252,8 @@ import {
   type FilmRoll,
   type FilmStock,
   type Camera,
-  type FilmRollInput,
 } from '@/services/api';
+import FilmRollDialog from '@/components/dialogs/FilmRollDialog.vue';
 
 const display = useDisplay();
 const mobile = computed(() => display.smAndDown.value);
@@ -321,7 +272,6 @@ const snackbar = ref(false);
 const snackbarText = ref('');
 const snackbarColor = ref('success');
 const formRef = ref<any>(null);
-const filmRollFormRef = ref<any>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const savingFilmRoll = ref(false);
@@ -332,15 +282,6 @@ const form = ref<OneShotChemicalBatchInput>({
   stopBath: undefined,
   filmRolls: [],
   developedAt: undefined,
-  notes: '',
-});
-
-const filmRollForm = ref<FilmRollInput>({
-  filmStock: '',
-  camera: undefined,
-  frameCount: 36,
-  status: 'loaded',
-  dateLoaded: undefined,
   notes: '',
 });
 
@@ -376,20 +317,6 @@ const filmRollOptions = computed(() =>
   filmRolls.value.map(roll => ({
     label: `${roll.filmStock.make} ${roll.filmStock.name}${roll.camera ? ` - ${roll.camera.make} ${roll.camera.name}` : ''}`,
     value: roll._id,
-  }))
-);
-
-const filmStockOptions = computed(() =>
-  filmStocks.value.map(stock => ({
-    label: `${stock.make} ${stock.name}`,
-    value: stock._id,
-  }))
-);
-
-const cameraOptions = computed(() =>
-  cameras.value.map(camera => ({
-    label: `${camera.make} ${camera.name}`,
-    value: camera._id,
   }))
 );
 
@@ -504,34 +431,22 @@ const confirmDelete = (batch: OneShotChemicalBatch) => {
 };
 
 const openFilmRollDialog = () => {
-  filmRollForm.value = {
-    filmStock: '',
-    camera: undefined,
-    frameCount: 36,
-    status: 'loaded',
-    dateLoaded: undefined,
-    notes: '',
-  };
   filmRollDialog.value = true;
 };
 
-const saveFilmRoll = async () => {
-  const { valid } = await filmRollFormRef.value?.validate();
-  if (!valid) return;
-
+const saveFilmRoll = async (filmRollData: any) => {
   savingFilmRoll.value = true;
   try {
-    const response = await filmRollsApi.create(filmRollForm.value);
+    const response = await filmRollsApi.create(filmRollData);
     const newRoll = response.data;
     
-    // Add to local filmRolls array
+    // Add to local filmRolls array (at the beginning)
     filmRolls.value.splice(0, 0, newRoll);
     
     // Add to selected film rolls in the batch form
     if (!form.value.filmRolls) {
       form.value.filmRolls = [];
     }
-    // form.value.filmRolls.push(newRoll._id);
     form.value.filmRolls.splice(0, 0, newRoll._id);
     
     showSnackbar('Film roll created successfully', 'success');
