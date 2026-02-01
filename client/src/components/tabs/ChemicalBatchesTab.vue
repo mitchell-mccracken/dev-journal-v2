@@ -400,7 +400,7 @@ const fetchAllRollCounts = async () => {
   for (const batch of batches.value) {
     try {
       const response = await chemicalBatchesApi.getRolls(batch._id);
-      batchRollCounts.value[batch._id] = response.data.length;
+      batchRollCounts.value[batch._id] = response.data.filter(roll => roll.countAsFullRoll).length;
     } catch {
       batchRollCounts.value[batch._id] = 0;
     }
@@ -411,7 +411,7 @@ const getRollsHelper = async (batchId: string) => {
   try {
     const response = await chemicalBatchesApi.getRolls(batchId);
     batchRolls.value[batchId] = response.data;
-    batchRollCounts.value[batchId] = response.data.length;
+    batchRollCounts.value[batchId] = response.data.filter(roll => roll.countAsFullRoll).length;
   } catch (error) {
     console.error('Failed to get rolls for batch:', error);
     throw error;
