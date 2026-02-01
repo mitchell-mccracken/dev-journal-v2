@@ -50,7 +50,7 @@ router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
 // POST /api/film-rolls - Create film roll
 router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, notes } = req.body;
+    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } = req.body;
     const filmRoll = await FilmRoll.create({
       filmStock,
       camera: camera || null,
@@ -59,6 +59,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       dateFinished,
       frameCount,
       status,
+      countAsFullRoll,
       notes,
       user: req.user!._id,
     });
@@ -74,7 +75,7 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
 // PUT /api/film-rolls/:id - Update film roll
 router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, notes } = req.body;
+    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } = req.body;
     const filmRoll = await FilmRoll.findOneAndUpdate(
       { _id: req.params.id, user: req.user!._id },
       { 
@@ -84,7 +85,8 @@ router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
         dateLoaded, 
         dateFinished, 
         frameCount, 
-        status, 
+        status,
+        countAsFullRoll,
         notes 
       },
       { new: true, runValidators: true }

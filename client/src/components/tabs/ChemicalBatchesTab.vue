@@ -183,7 +183,7 @@
                   <v-card-title class="d-flex justify-space-between align-center text-subtitle-1">
                     <div>
                       <v-icon start size="small">mdi-filmstrip</v-icon>
-                      Rolls Developed ({{ batchRolls[batch._id]?.length || 0 }})
+                      Rolls Developed ({{ batchRollCounts[batch._id]|| 0 }})
                     </div>
                     <v-btn
                       variant="text"
@@ -309,7 +309,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import { chemicalBatchesApi, filmStocksApi, camerasApi, filmRollsApi, type ChemicalBatch, type ChemicalBatchInput, type FilmRoll, type FilmStock, type Camera } from '@/services/api';
 import FilmRollDialog from '@/components/dialogs/FilmRollDialog.vue';
@@ -555,6 +555,15 @@ const saveFilmRoll = async (filmRollData: any) => {
     savingFilmRoll.value = false;
   }
 };
+
+// Watch batchRolls for debugging
+watch(batchRolls, (newRolls) => {
+  console.log('batchRolls updated:', newRolls);
+}, { deep: true });
+// Watch batchRollCounts for debugging
+watch(batchRollCounts, (newCounts) => {
+  console.log('batchRollCounts updated:', newCounts);
+}, { deep: true });
 
 // Expose refresh method for parent component
 const refresh = () => {

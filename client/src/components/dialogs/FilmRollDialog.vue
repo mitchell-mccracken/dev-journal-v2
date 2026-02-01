@@ -195,14 +195,19 @@ const handleSave = async () => {
   const { valid } = await formRef.value?.validate();
   if (!valid) return;
 
-  const payload = { ...form.value };
-  
-  // Clean up undefined/empty values
-  if (!payload.camera) delete payload.camera;
-  if (!payload.chemicalBatch) delete payload.chemicalBatch;
-  if (!payload.dateLoaded) delete payload.dateLoaded;
-  if (!payload.dateFinished) delete payload.dateFinished;
-  if (!payload.notes) delete payload.notes;
+  const payload: FilmRollInput = {
+    filmStock: form.value.filmStock,
+    frameCount: form.value.frameCount,
+    status: form.value.status,
+    countAsFullRoll: form.value.countAsFullRoll,
+  };
+
+  // Add optional fields only if they have values
+  if (form.value.camera) payload.camera = form.value.camera;
+  if (form.value.chemicalBatch) payload.chemicalBatch = form.value.chemicalBatch;
+  if (form.value.dateLoaded) payload.dateLoaded = form.value.dateLoaded;
+  if (form.value.dateFinished) payload.dateFinished = form.value.dateFinished;
+  if (form.value.notes) payload.notes = form.value.notes;
 
   emit('save', payload);
 };
