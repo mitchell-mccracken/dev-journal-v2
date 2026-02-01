@@ -101,80 +101,6 @@
       </tbody>
     </v-table>
 
-    <!-- Create/Edit Dialog -->
-    <v-dialog v-model="dialogOpen" max-width="500">
-      <v-card>
-        <v-card-title>{{ editingRoll ? 'Edit Roll' : 'New Film Roll' }}</v-card-title>
-        <v-card-text>
-          <v-form ref="formRef" @submit.prevent="saveRoll">
-            <v-select
-              v-model="form.filmStock"
-              label="Film Stock"
-              :items="filmStocks"
-              item-title="displayName"
-              item-value="_id"
-              :rules="[rules.required]"
-              class="mb-2"
-            />
-            <v-select
-              v-model="form.camera"
-              label="Camera (optional)"
-              :items="cameras"
-              item-title="displayName"
-              item-value="_id"
-              clearable
-              class="mb-2"
-            />
-            <v-select
-              v-model="form.chemicalBatch"
-              label="Chemical Batch (optional)"
-              :items="chemicalBatches"
-              item-title="name"
-              item-value="_id"
-              clearable
-              class="mb-2"
-            />
-            <v-text-field
-              v-model.number="form.frameCount"
-              label="Frame Count"
-              type="number"
-              class="mb-2"
-            />
-            <v-select
-              v-model="form.status"
-              label="Status"
-              :items="['loaded', 'shot', 'developed', 'scanned']"
-              class="mb-2"
-            />
-            <v-text-field
-              v-model="form.dateLoaded"
-              label="Date Loaded"
-              type="date"
-              class="mb-2"
-            />
-            <v-text-field
-              v-model="form.dateFinished"
-              label="Date Finished"
-              type="date"
-              class="mb-2"
-            />
-            <v-textarea
-              v-model="form.notes"
-              label="Notes (optional)"
-              rows="3"
-            />
-          </v-form>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="dialogOpen = false">Cancel</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveRoll">
-            {{ editingRoll ? 'Update' : 'Create' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <!-- Delete Confirmation Dialog -->
     <v-dialog v-model="deleteDialogOpen" max-width="400">
       <v-card>
@@ -189,11 +115,23 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Film Roll Dialog -->
+    <FilmRollDialog
+      v-model="filmRollDialog"
+      :film-stocks="filmStocks"
+      :cameras="cameras"
+      :chemical-batches="chemicalBatches"
+      :editing-roll="editingRoll"
+      :saving="saving"
+      :show-all-fields="true"
+      @save="saveRoll"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useDisplay } from 'vuetify';
 import { 
   filmRollsApi, 
@@ -206,6 +144,7 @@ import {
   type Camera,
   type ChemicalBatch
 } from '@/services/api';
+import FilmRollDialog from '../dialogs/FilmRollDialog.vue';
 
 const display = useDisplay();
 const mobile = computed(() => display.smAndDown.value);
@@ -219,38 +158,10 @@ const error = ref<string | null>(null);
 const saving = ref(false);
 const deleting = ref(false);
 
-const dialogOpen = ref(false);
+const filmRollDialog = ref(false);
 const deleteDialogOpen = ref(false);
 const editingRoll = ref<FilmRoll | null>(null);
 const deletingRoll = ref<FilmRoll | null>(null);
-const formRef = ref();
-
-const form = reactive<FilmRollInput>({
-  filmStock: '',
-  camera: '',
-  chemicalBatch: '',
-  frameCount: 36,
-  status: 'loaded',
-  dateLoaded: '',
-  dateFinished: '',
-  notes: '',
-});
-
-const rules = {
-  required: (v: string) => !!v || 'This field is required',
-};
-
-const resetForm = () => {
-  form.filmStock = '';
-  form.camera = '';
-  form.chemicalBatch = '';
-  form.frameCount = 36;
-  form.status = 'loaded';
-  form.dateLoaded = '';
-  form.dateFinished = '';
-  form.notes = '';
-  editingRoll.value = null;
-};
 
 const fetchData = async () => {
   loading.value = true;
@@ -274,40 +185,26 @@ const fetchData = async () => {
 };
 
 const openCreateDialog = () => {
-  resetForm();
-  dialogOpen.value = true;
+  editingRoll.value = null;
+  filmRollDialog.value = true;
 };
 
 const openEditDialog = (roll: FilmRoll) => {
   editingRoll.value = roll;
-  form.filmStock = roll.filmStock?._id || '';
-  form.camera = roll.camera?._id || '';
-  form.chemicalBatch = roll.chemicalBatch?._id || '';
-  form.frameCount = roll.frameCount;
-  form.status = roll.status;
-  form.dateLoaded = roll.dateLoaded ? roll.dateLoaded.split('T')[0] : '';
-  form.dateFinished = roll.dateFinished ? roll.dateFinished.split('T')[0] : '';
-  form.notes = roll.notes || '';
-  dialogOpen.value = true;
+  filmRollDialog.value = true;
 };
 
-const saveRoll = async () => {
-  const { valid } = await formRef.value.validate();
-  if (!valid) return;
-
+const saveRoll = async (filmRollData: FilmRollInput) => {
   saving.value = true;
   error.value = null;
   try {
-    const payload = { ...form };
-    if (!payload.camera) delete payload.camera;
-    if (!payload.chemicalBatch) delete payload.chemicalBatch;
-    
     if (editingRoll.value) {
-      await filmRollsApi.update(editingRoll.value._id, payload);
+      await filmRollsApi.update(editingRoll.value._id, filmRollData);
     } else {
-      await filmRollsApi.create(payload);
+      await filmRollsApi.create(filmRollData);
     }
-    dialogOpen.value = false;
+    filmRollDialog.value = false;
+    editingRoll.value = null;
     await fetchData();
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Failed to save roll';
