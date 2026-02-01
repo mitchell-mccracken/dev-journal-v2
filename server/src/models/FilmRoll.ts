@@ -12,6 +12,7 @@ export interface IFilmRoll extends Document {
   user: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  countAsFullRoll?: boolean;
 }
 
 const filmRollSchema = new Schema<IFilmRoll>(
@@ -55,6 +56,10 @@ const filmRollSchema = new Schema<IFilmRoll>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+    },
+    countAsFullRoll: {
+      type: Boolean,
+      default: true,
     },
   },
   {
