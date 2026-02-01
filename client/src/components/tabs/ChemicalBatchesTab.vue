@@ -104,6 +104,16 @@
                   </template>
                 </v-list-item>
               </v-list>
+              <v-btn
+                variant="text"
+                size="small"
+                color="primary"
+                class="mt-2"
+                @click="openFilmRollDialog(batch._id)"
+              >
+                <v-icon start size="small">mdi-plus</v-icon>
+                Add Film Roll
+              </v-btn>
             </v-card-text>
           </div>
         </v-expand-transition>
@@ -170,9 +180,20 @@
             <tr v-if="expandedRows[batch._id]">
               <td colspan="7" class="pa-0">
                 <v-card flat color="grey-darken-4" class="ma-2">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon start size="small">mdi-filmstrip</v-icon>
-                    Rolls Developed ({{ batchRolls[batch._id]?.length || 0 }})
+                  <v-card-title class="d-flex justify-space-between align-center text-subtitle-1">
+                    <div>
+                      <v-icon start size="small">mdi-filmstrip</v-icon>
+                      Rolls Developed ({{ batchRolls[batch._id]?.length || 0 }})
+                    </div>
+                    <v-btn
+                      variant="text"
+                      size="small"
+                      color="primary"
+                      @click="openFilmRollDialog(batch._id)"
+                    >
+                      <v-icon start size="small">mdi-plus</v-icon>
+                      Add Film Roll
+                    </v-btn>
                   </v-card-title>
                   <v-card-text v-if="loadingRolls[batch._id]" class="text-center py-4">
                     <v-progress-circular indeterminate size="24" />
@@ -275,18 +296,30 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Film Roll Dialog -->
+    <FilmRollDialog
+      v-model="filmRollDialog"
+      :film-stocks="filmStocks"
+      :cameras="cameras"
+      :saving="savingFilmRoll"
+      @save="saveFilmRoll"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue';
 import { useDisplay } from 'vuetify';
-import { chemicalBatchesApi, type ChemicalBatch, type ChemicalBatchInput, type FilmRoll } from '@/services/api';
+import { chemicalBatchesApi, filmStocksApi, camerasApi, filmRollsApi, type ChemicalBatch, type ChemicalBatchInput, type FilmRoll, type FilmStock, type Camera } from '@/services/api';
+import FilmRollDialog from '@/components/dialogs/FilmRollDialog.vue';
 
 const display = useDisplay();
 const mobile = computed(() => display.smAndDown.value);
 
 const batches = ref<ChemicalBatch[]>([]);
+const filmStocks = ref<FilmStock[]>([]);
+const cameras = ref<Camera[]>([]);
 
 // Expandable rows state
 const expandedRows = ref<Record<string, boolean>>({});
@@ -297,6 +330,9 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const saving = ref(false);
 const deleting = ref(false);
+const savingFilmRoll = ref(false);
+const filmRollDialog = ref(false);
+const selectedBatchId = ref<string | null>(null);
 
 const dialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -338,6 +374,24 @@ const fetchBatches = async () => {
     error.value = err.response?.data?.message || 'Failed to load batches';
   } finally {
     loading.value = false;
+  }
+};
+
+const loadFilmStocks = async () => {
+  try {
+    const response = await filmStocksApi.getAll();
+    filmStocks.value = response.data;
+  } catch (err) {
+    console.error('Error loading film stocks:', err);
+  }
+};
+
+const loadCameras = async () => {
+  try {
+    const response = await camerasApi.getAll();
+    cameras.value = response.data;
+  } catch (err) {
+    console.error('Error loading cameras:', err);
   }
 };
 
@@ -472,6 +526,36 @@ const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+const openFilmRollDialog = (batchId: string) => {
+  selectedBatchId.value = batchId;
+  filmRollDialog.value = true;
+};
+
+const saveFilmRoll = async (filmRollData: any) => {
+  if (!selectedBatchId.value) return;
+  
+  savingFilmRoll.value = true;
+  try {
+    // Add the chemical batch to the film roll data
+    const rollWithBatch = {
+      ...filmRollData,
+      chemicalBatch: selectedBatchId.value,
+    };
+    
+    await filmRollsApi.create(rollWithBatch);
+    
+    // Refresh the rolls for this batch
+    await getRollsHelper(selectedBatchId.value);
+    
+    filmRollDialog.value = false;
+    selectedBatchId.value = null;
+  } catch (err: any) {
+    error.value = err.response?.data?.message || 'Failed to create film roll';
+  } finally {
+    savingFilmRoll.value = false;
+  }
+};
+
 // Expose refresh method for parent component
 const refresh = () => {
   // if batches have expanded rows, re-fetch their rolls
@@ -483,5 +567,11 @@ const refresh = () => {
 };
 defineExpose({ refresh });
 
-onMounted(fetchBatches);
+onMounted(async () => {
+  await Promise.all([
+    fetchBatches(),
+    loadFilmStocks(),
+    loadCameras(),
+  ]);
+});
 </script>
