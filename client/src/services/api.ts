@@ -120,6 +120,7 @@ export interface FilmRoll {
   dateFinished?: string;
   frameCount: number;
   status: string;
+  countAsFullRoll: boolean;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -133,6 +134,7 @@ export interface FilmRollInput {
   dateFinished?: string;
   frameCount?: number;
   status?: string;
+  countAsFullRoll?: boolean;
   notes?: string;
 }
 
