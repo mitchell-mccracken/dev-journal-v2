@@ -9,7 +9,21 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: config.nodeEnv === 'production' ? true : config.clientUrl,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., mobile apps, curl)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      config.clientUrl,
+      ...config.capacitorOrigins,
+    ];
+
+    if (allowedOrigins.includes(origin) || config.nodeEnv === 'production') {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());
