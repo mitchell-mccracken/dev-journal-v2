@@ -138,7 +138,7 @@ const isOpen = computed({
 
 const filmStockOptions = computed(() =>
   props.filmStocks.map(stock => ({
-    label: `${stock.make} ${stock.name}`,
+    label: stock.format ? `${stock.make} ${stock.name} (${stock.format})` : `${stock.make} ${stock.name}`,
     value: stock._id,
   }))
 );

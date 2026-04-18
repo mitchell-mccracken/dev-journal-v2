@@ -24,4 +24,5 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'fallback-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  capacitorOrigins: ['capacitor://localhost', 'http://localhost', 'ionic://localhost'],
 };
