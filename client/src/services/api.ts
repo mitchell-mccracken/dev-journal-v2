@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+const getBaseURL = (): string => {
+  // Capacitor native apps need the full URL since they don't run on the same origin
+  if (window.location.protocol === 'capacitor:' || window.location.protocol === 'ionic:') {
+    return import.meta.env.VITE_API_URL || 'https://film-journal-app-4820cabb8531.herokuapp.com/api';
+  }
+  // Web: use relative path (works for both dev proxy and production)
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
