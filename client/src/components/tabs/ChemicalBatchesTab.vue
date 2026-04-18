@@ -98,9 +98,12 @@
                     <div>Added: {{ formatDate(roll.createdAt) }}</div>
                   </v-list-item-subtitle>
                   <template #append>
-                    <v-chip size="x-small" :color="getRollStatusColor(roll.status)">
+                    <v-chip size="x-small" :color="getRollStatusColor(roll.status)" class="mr-1">
                       {{ roll.status }}
                     </v-chip>
+                    <v-btn icon size="x-small" variant="text" @click="openEditFilmRollDialog(roll)">
+                      <v-icon size="x-small">mdi-pencil</v-icon>
+                    </v-btn>
                   </template>
                 </v-list-item>
               </v-list>
@@ -210,6 +213,7 @@
                         <th>Frames</th>
                         <th>Status</th>
                         <th>Date Finished</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -224,6 +228,11 @@
                           </v-chip>
                         </td>
                         <td>{{ roll.dateFinished ? formatDate(roll.dateFinished) : '—' }}</td>
+                        <td>
+                          <v-btn icon size="x-small" variant="text" @click="openEditFilmRollDialog(roll)">
+                            <v-icon size="x-small">mdi-pencil</v-icon>
+                          </v-btn>
+                        </td>
                       </tr>
                     </tbody>
                   </v-table>
@@ -302,7 +311,10 @@
       v-model="filmRollDialog"
       :film-stocks="filmStocks"
       :cameras="cameras"
+      :chemical-batches="batches"
+      :editing-roll="editingFilmRoll"
       :saving="savingFilmRoll"
+      :show-all-fields="true"
       @save="saveFilmRoll"
     />
   </div>
@@ -333,6 +345,7 @@ const deleting = ref(false);
 const savingFilmRoll = ref(false);
 const filmRollDialog = ref(false);
 const selectedBatchId = ref<string | null>(null);
+const editingFilmRoll = ref<FilmRoll | null>(null);
 
 const dialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -410,8 +423,9 @@ const fetchAllRollCounts = async () => {
 const getRollsHelper = async (batchId: string) => {
   try {
     const response = await chemicalBatchesApi.getRolls(batchId);
-    batchRolls.value[batchId] = response.data;
-    batchRollCounts.value[batchId] = response.data.filter(roll => roll.countAsFullRoll).length;
+    const sorted = [...response.data].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    batchRolls.value[batchId] = sorted;
+    batchRollCounts.value[batchId] = sorted.filter(roll => roll.countAsFullRoll).length;
   } catch (error) {
     console.error('Failed to get rolls for batch:', error);
     throw error;
@@ -527,30 +541,39 @@ const formatDate = (dateString: string) => {
 };
 
 const openFilmRollDialog = (batchId: string) => {
+  editingFilmRoll.value = null;
   selectedBatchId.value = batchId;
   filmRollDialog.value = true;
 };
 
+const openEditFilmRollDialog = (roll: FilmRoll) => {
+  editingFilmRoll.value = roll;
+  selectedBatchId.value = roll.chemicalBatch?._id || null;
+  filmRollDialog.value = true;
+};
+
 const saveFilmRoll = async (filmRollData: any) => {
-  if (!selectedBatchId.value) return;
-  
   savingFilmRoll.value = true;
   try {
-    // Add the chemical batch to the film roll data
-    const rollWithBatch = {
-      ...filmRollData,
-      chemicalBatch: selectedBatchId.value,
-    };
-    
-    await filmRollsApi.create(rollWithBatch);
-    
-    // Refresh the rolls for this batch
-    await getRollsHelper(selectedBatchId.value);
-    
+    if (editingFilmRoll.value) {
+      await filmRollsApi.update(editingFilmRoll.value._id, filmRollData);
+      const originalBatchId = editingFilmRoll.value.chemicalBatch?._id;
+      if (originalBatchId) await getRollsHelper(originalBatchId);
+      if (filmRollData.chemicalBatch && filmRollData.chemicalBatch !== originalBatchId) {
+        await getRollsHelper(filmRollData.chemicalBatch);
+      }
+    } else {
+      if (!selectedBatchId.value) return;
+      const rollWithBatch = { ...filmRollData, chemicalBatch: selectedBatchId.value };
+      await filmRollsApi.create(rollWithBatch);
+      await getRollsHelper(selectedBatchId.value);
+    }
     filmRollDialog.value = false;
+    editingFilmRoll.value = null;
     selectedBatchId.value = null;
+    await fetchAllRollCounts();
   } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to create film roll';
+    error.value = err.response?.data?.message || 'Failed to save film roll';
   } finally {
     savingFilmRoll.value = false;
   }
