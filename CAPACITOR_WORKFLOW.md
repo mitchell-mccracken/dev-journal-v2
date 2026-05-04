@@ -74,3 +74,6 @@ cp client/assets/icon-only.png client/ios/App/App/Assets.xcassets/AppIcon.appico
 Then in Xcode: **Product → Clean Build Folder** (Shift+Cmd+K) before running.
 - client/ios/App/App.xcworkspace is the path to file that xcode needs
 
+### Other notes:
+- if getting errors when trying to save a processed image ensure that this key/value is on the info tab still
+  - <Privacy - Photo Library Additions Usage Description> : "This app saves your processed photos to your photo library."
