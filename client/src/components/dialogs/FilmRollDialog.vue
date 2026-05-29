@@ -54,6 +54,8 @@
             label="Date Loaded"
             type="date"
             class="mb-2"
+            clearable
+            @click:clear="form.dateLoaded = ''"
           />
           
           <template v-if="showAllFields">
@@ -62,6 +64,8 @@
               label="Date Finished"
               type="date"
               class="mb-2"
+              clearable
+              @click:clear="form.dateFinished = ''"
             />
           </template>
 
