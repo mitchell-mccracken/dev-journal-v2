@@ -26,9 +26,119 @@
       </v-btn>
     </v-card>
 
+    <template v-else>
+    <!-- Filters -->
+    <v-card class="mb-4 pa-3" variant="tonal">
+      <div class="d-flex align-center justify-space-between">
+        <div class="d-flex align-center">
+          <v-icon start size="small">mdi-filter-variant</v-icon>
+          <span class="text-subtitle-2">Filters</span>
+          <v-chip v-if="activeFilterCount > 0" size="x-small" color="primary" class="ml-2">
+            {{ activeFilterCount }}
+          </v-chip>
+        </div>
+        <div class="d-flex align-center">
+          <v-btn v-if="activeFilterCount > 0" variant="text" size="small" @click="clearFilters">
+            Clear
+          </v-btn>
+          <v-btn v-if="mobile" icon variant="text" size="small" @click="filtersExpanded = !filtersExpanded">
+            <v-icon>{{ filtersExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+          </v-btn>
+        </div>
+      </div>
+      <v-expand-transition>
+        <v-row v-show="!mobile || filtersExpanded" dense class="mt-1">
+          <v-col cols="12" sm="6" md="3">
+            <v-select
+              v-model="filterStatus"
+              label="Status"
+              :items="statusOptions"
+              item-title="label"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-select
+              v-model="filterCamera"
+              label="Camera"
+              :items="cameraFilterOptions"
+              item-title="label"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-select
+              v-model="filterFilmStock"
+              label="Film Stock"
+              :items="filmStockFilterOptions"
+              item-title="label"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
+            <v-select
+              v-model="filterDateRange"
+              label="Date Added"
+              :items="dateRangeOptions"
+              item-title="label"
+              item-value="value"
+              density="compact"
+              variant="outlined"
+              hide-details
+            />
+          </v-col>
+          <template v-if="filterDateRange === 'custom'">
+            <v-col cols="12" sm="6" md="3">
+              <v-text-field
+                v-model="filterDateFrom"
+                label="From"
+                type="date"
+                density="compact"
+                variant="outlined"
+                hide-details
+                clearable
+                @click:clear="filterDateFrom = ''"
+              />
+            </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-text-field
+                v-model="filterDateTo"
+                label="To"
+                type="date"
+                density="compact"
+                variant="outlined"
+                hide-details
+                clearable
+                @click:clear="filterDateTo = ''"
+              />
+            </v-col>
+          </template>
+        </v-row>
+      </v-expand-transition>
+    </v-card>
+
+    <!-- No rolls match filters -->
+    <v-card v-if="filteredRolls.length === 0" class="pa-8 text-center">
+      <v-icon size="64" color="grey">mdi-filter-remove-outline</v-icon>
+      <p class="text-h6 mt-4">No rolls match your filters</p>
+      <p class="text-body-2 text-grey">Try adjusting or clearing your filters.</p>
+      <v-btn color="primary" variant="tonal" class="mt-4" @click="clearFilters">
+        Clear filters
+      </v-btn>
+    </v-card>
+
     <!-- Mobile Card Layout -->
     <div v-else-if="mobile">
-      <v-card v-for="roll in rolls" :key="roll._id" class="mb-3">
+      <v-card v-for="roll in filteredRolls" :key="roll._id" class="mb-3">
         <v-card-item>
           <template #title>
             <div class="d-flex align-center justify-space-between">
@@ -77,7 +187,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="roll in rolls" :key="roll._id">
+        <tr v-for="roll in filteredRolls" :key="roll._id">
           <td>
             <strong>{{ roll.filmStock?.make }} {{ roll.filmStock?.name }}</strong>
           </td>
@@ -100,6 +210,7 @@
         </tr>
       </tbody>
     </v-table>
+    </template>
 
     <!-- Delete Confirmation Dialog -->
     <v-dialog v-model="deleteDialogOpen" max-width="400">
@@ -119,8 +230,8 @@
     <!-- Film Roll Dialog -->
     <FilmRollDialog
       v-model="filmRollDialog"
-      :film-stocks="filmStocks"
-      :cameras="cameras"
+      :film-stocks="sortedFilmStocks"
+      :cameras="sortedCameras"
       :chemical-batches="chemicalBatches"
       :editing-roll="editingRoll"
       :saving="saving"
@@ -162,6 +273,133 @@ const filmRollDialog = ref(false);
 const deleteDialogOpen = ref(false);
 const editingRoll = ref<FilmRoll | null>(null);
 const deletingRoll = ref<FilmRoll | null>(null);
+
+// Filters
+const filterCamera = ref<string | null>(null);
+const filterFilmStock = ref<string | null>(null);
+const filterStatus = ref<string>('loaded');
+type DateRange = 'year' | '6months' | 'all' | 'custom';
+const filterDateRange = ref<DateRange>('year');
+const filterDateFrom = ref<string>('');
+const filterDateTo = ref<string>('');
+const filtersExpanded = ref(false);
+
+const statusOptions = [
+  { label: 'All statuses', value: 'all' },
+  { label: 'Loaded', value: 'loaded' },
+  { label: 'Shot', value: 'shot' },
+  { label: 'Developed', value: 'developed' },
+  { label: 'Scanned', value: 'scanned' },
+];
+
+const dateRangeOptions = [
+  { label: 'Past year', value: 'year' },
+  { label: 'Past 6 months', value: '6months' },
+  { label: 'All time', value: 'all' },
+  { label: 'Custom', value: 'custom' },
+];
+
+const cameraFilterOptions = computed(() => [
+  { label: 'All cameras', value: null },
+  ...cameras.value.map(c => ({ label: c.displayName, value: c._id })),
+]);
+
+const filmStockFilterOptions = computed(() => [
+  { label: 'All film stocks', value: null },
+  ...filmStocks.value.map(s => ({ label: s.displayName, value: s._id })),
+]);
+
+const activeFilterCount = computed(() => {
+  let n = 0;
+  if (filterCamera.value) n++;
+  if (filterFilmStock.value) n++;
+  if (filterStatus.value !== 'loaded') n++;
+  if (filterDateRange.value !== 'year') n++;
+  return n;
+});
+
+const clearFilters = () => {
+  filterCamera.value = null;
+  filterFilmStock.value = null;
+  filterStatus.value = 'loaded';
+  filterDateRange.value = 'year';
+  filterDateFrom.value = '';
+  filterDateTo.value = '';
+};
+
+// Lower bound for the date filter, applied to createdAt. null = no lower bound.
+const dateCutoff = (): Date | null => {
+  const now = new Date();
+  if (filterDateRange.value === 'year') {
+    const d = new Date(now);
+    d.setFullYear(d.getFullYear() - 1);
+    return d;
+  }
+  if (filterDateRange.value === '6months') {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - 6);
+    return d;
+  }
+  if (filterDateRange.value === 'custom') {
+    return filterDateFrom.value ? new Date(filterDateFrom.value) : null;
+  }
+  return null; // 'all'
+};
+
+// Upper bound (inclusive) for the custom date filter. null = no upper bound.
+const dateUpperBound = (): Date | null => {
+  if (filterDateRange.value === 'custom' && filterDateTo.value) {
+    const d = new Date(filterDateTo.value);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }
+  return null;
+};
+
+const filteredRolls = computed(() => {
+  const from = dateCutoff();
+  const to = dateUpperBound();
+  return rolls.value.filter((r) => {
+    if (filterCamera.value && r.camera?._id !== filterCamera.value) return false;
+    if (filterFilmStock.value && r.filmStock?._id !== filterFilmStock.value) return false;
+    if (filterStatus.value !== 'all' && r.status !== filterStatus.value) return false;
+    const created = new Date(r.createdAt);
+    if (from && created < from) return false;
+    if (to && created > to) return false;
+    return true;
+  });
+});
+
+// Usage counts derived from loaded rolls, used to sort dialog dropdowns.
+const usageMap = (key: 'filmStock' | 'camera') => {
+  const m = new Map<string, { count: number; lastUsed: number }>();
+  for (const r of rolls.value) {
+    const id = r[key]?._id;
+    if (!id) continue;
+    const when = new Date(r.dateLoaded || r.createdAt).getTime();
+    const cur = m.get(id) ?? { count: 0, lastUsed: 0 };
+    m.set(id, { count: cur.count + 1, lastUsed: Math.max(cur.lastUsed, when) });
+  }
+  return m;
+};
+
+const sortedFilmStocks = computed(() => {
+  const u = usageMap('filmStock');
+  return [...filmStocks.value].sort((a, b) => {
+    const A = u.get(a._id) ?? { count: 0, lastUsed: 0 };
+    const B = u.get(b._id) ?? { count: 0, lastUsed: 0 };
+    return B.count - A.count || B.lastUsed - A.lastUsed;
+  });
+});
+
+const sortedCameras = computed(() => {
+  const u = usageMap('camera');
+  return [...cameras.value].sort((a, b) => {
+    const A = u.get(a._id) ?? { count: 0, lastUsed: 0 };
+    const B = u.get(b._id) ?? { count: 0, lastUsed: 0 };
+    return B.count - A.count || B.lastUsed - A.lastUsed;
+  });
+});
 
 const fetchData = async () => {
   loading.value = true;
