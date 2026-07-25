@@ -92,3 +92,5 @@ heroku config:set JWT_SECRET=your-production-secret
 heroku config:set NODE_ENV=production
 git push heroku main
 ```
+url is https://film-journal-app-4820cabb8531.herokuapp.com/home
+
