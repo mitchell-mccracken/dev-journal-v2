@@ -17,7 +17,7 @@
     "run_worker_first": ["/api/*"]
   },
   // Not secret. Matches Heroku, where CORS accepts any origin in production.
-  "vars": { "NODE_ENV": "production" },
+  "vars": { "NODE_ENV": "production",  "JWT_EXPIRES_IN": "7d"},
   "observability": { "enabled": true },
   // MONGODB_URI and JWT_SECRET live in the dashboard as Secrets (see
   // DEPLOYMENT.md). This stops a deploy from wiping any plain-text variables
