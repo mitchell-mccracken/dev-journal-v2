@@ -23,3 +23,7 @@ npm-debug.log*
 
 # Testing
 coverage/
+
+# Wrangler local state
+.wrangler/
+.dev.vars*

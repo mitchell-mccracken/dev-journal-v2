@@ -1,153 +1,129 @@
-import { Router, Response } from 'express';
-import { OneShotChemicalBatch } from '../models/OneShotChemicalBatch';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { Hono } from 'hono';
+import { OneShotChemicalBatch, collection } from '../db/models';
+import { populateOneShotBatches } from '../db/populate';
+import { buildInsert, buildUpdate, withDefaults } from '../db/schema';
+import { authenticate, type AuthEnv } from '../middleware/auth';
+import { idParam, readBody } from './body';
 
-const router = Router();
+const router = new Hono<AuthEnv>();
+
+const isValidationError = (error: unknown): error is Error =>
+  (error as Error)?.name === 'ValidationError';
 
 // GET /api/one-shot-batches - Get all one-shot batches for authenticated user
-router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/', authenticate, async (c) => {
   try {
-    const batches = await OneShotChemicalBatch.find({ user: req.user!._id })
-      .populate('developer')
-      .populate('fixer')
-      .populate('stopBath')
-      .populate({
-        path: 'filmRolls',
-        populate: [
-          { path: 'filmStock' },
-          { path: 'camera' }
-        ]
-      })
-      .sort({ createdAt: -1 });
-    res.json({ data: batches });
+    const batches = await (await collection(OneShotChemicalBatch))
+      .find({ user: c.get('user')._id })
+      .sort({ createdAt: -1 })
+      .toArray();
+    const populated = await populateOneShotBatches(
+      batches.map((batch) => withDefaults(OneShotChemicalBatch, batch))
+    );
+    return c.json({ data: populated });
   } catch (error) {
     console.error('Error fetching one-shot batches:', error);
-    res.status(500).json({ message: 'Error fetching one-shot batches' });
+    return c.json({ message: 'Error fetching one-shot batches' }, 500);
   }
 });
 
 // GET /api/one-shot-batches/:id - Get a single one-shot batch
-router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/:id', authenticate, async (c) => {
   try {
-    const batch = await OneShotChemicalBatch.findOne({
-      _id: req.params.id,
-      user: req.user!._id,
-    })
-      .populate('developer')
-      .populate('fixer')
-      .populate('stopBath')
-      .populate({
-        path: 'filmRolls',
-        populate: [
-          { path: 'filmStock' },
-          { path: 'camera' }
-        ]
-      });
-    
+    const _id = idParam(c);
+    const batch =
+      _id && (await (await collection(OneShotChemicalBatch)).findOne({ _id, user: c.get('user')._id }));
+
     if (!batch) {
-      res.status(404).json({ message: 'One-shot batch not found' });
-      return;
+      return c.json({ message: 'One-shot batch not found' }, 404);
     }
-    
-    res.json({ data: batch });
+
+    const [populated] = await populateOneShotBatches([withDefaults(OneShotChemicalBatch, batch)]);
+    return c.json({ data: populated });
   } catch (error) {
     console.error('Error fetching one-shot batch:', error);
-    res.status(500).json({ message: 'Error fetching one-shot batch' });
+    return c.json({ message: 'Error fetching one-shot batch' }, 500);
   }
 });
 
 // POST /api/one-shot-batches - Create a new one-shot batch
-router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', authenticate, async (c) => {
   try {
-    const { developer, fixer, stopBath, developedAt, filmRolls, notes } = req.body;
-    
-    const batch = await OneShotChemicalBatch.create({
+    const { developer, fixer, stopBath, developedAt, filmRolls, notes } = await readBody(c);
+
+    const batch = await buildInsert(OneShotChemicalBatch, {
       developer,
       fixer,
       stopBath,
       developedAt,
       filmRolls,
       notes,
-      user: req.user!._id,
+      user: c.get('user')._id,
     });
-    
-    const populatedBatch = await OneShotChemicalBatch.findById(batch._id)
-      .populate('developer')
-      .populate('fixer')
-      .populate('stopBath')
-      .populate({
-        path: 'filmRolls',
-        populate: [
-          { path: 'filmStock' },
-          { path: 'camera' }
-        ]
-      });
-    
-    res.status(201).json({ data: populatedBatch });
-  } catch (error: any) {
+    await (await collection(OneShotChemicalBatch)).insertOne(batch);
+
+    const [populatedBatch] = await populateOneShotBatches([batch]);
+    return c.json({ data: populatedBatch }, 201);
+  } catch (error) {
     console.error('Error creating one-shot batch:', error);
-    if (error.name === 'ValidationError') {
-      res.status(400).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: 'Error creating one-shot batch' });
+    if (isValidationError(error)) {
+      return c.json({ message: error.message }, 400);
     }
+    return c.json({ message: 'Error creating one-shot batch' }, 500);
   }
 });
 
 // PUT /api/one-shot-batches/:id - Update a one-shot batch
-router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/:id', authenticate, async (c) => {
   try {
-    const { developer, fixer, stopBath, developedAt, filmRolls, notes } = req.body;
-    
-    const batch = await OneShotChemicalBatch.findOneAndUpdate(
-      { _id: req.params.id, user: req.user!._id },
-      { developer, fixer, stopBath, developedAt, filmRolls, notes },
-      { new: true, runValidators: true }
-    )
-      .populate('developer')
-      .populate('fixer')
-      .populate('stopBath')
-      .populate({
-        path: 'filmRolls',
-        populate: [
-          { path: 'filmStock' },
-          { path: 'camera' }
-        ]
-      });
-    
+    const { developer, fixer, stopBath, developedAt, filmRolls, notes } = await readBody(c);
+
+    const update = await buildUpdate(OneShotChemicalBatch, {
+      developer,
+      fixer,
+      stopBath,
+      developedAt,
+      filmRolls,
+      notes,
+    });
+    const _id = idParam(c);
+    const batch =
+      _id &&
+      (await (await collection(OneShotChemicalBatch)).findOneAndUpdate({ _id, user: c.get('user')._id }, update, {
+        returnDocument: 'after',
+      }));
+
     if (!batch) {
-      res.status(404).json({ message: 'One-shot batch not found' });
-      return;
+      return c.json({ message: 'One-shot batch not found' }, 404);
     }
-    
-    res.json({ data: batch });
-  } catch (error: any) {
+
+    const [populated] = await populateOneShotBatches([withDefaults(OneShotChemicalBatch, batch)]);
+    return c.json({ data: populated });
+  } catch (error) {
     console.error('Error updating one-shot batch:', error);
-    if (error.name === 'ValidationError') {
-      res.status(400).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: 'Error updating one-shot batch' });
+    if (isValidationError(error)) {
+      return c.json({ message: error.message }, 400);
     }
+    return c.json({ message: 'Error updating one-shot batch' }, 500);
   }
 });
 
 // DELETE /api/one-shot-batches/:id - Delete a one-shot batch
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.delete('/:id', authenticate, async (c) => {
   try {
-    const batch = await OneShotChemicalBatch.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user!._id,
-    });
-    
+    const _id = idParam(c);
+    const batch =
+      _id &&
+      (await (await collection(OneShotChemicalBatch)).findOneAndDelete({ _id, user: c.get('user')._id }));
+
     if (!batch) {
-      res.status(404).json({ message: 'One-shot batch not found' });
-      return;
+      return c.json({ message: 'One-shot batch not found' }, 404);
     }
-    
-    res.json({ message: 'One-shot batch deleted successfully' });
+
+    return c.json({ message: 'One-shot batch deleted successfully' });
   } catch (error) {
     console.error('Error deleting one-shot batch:', error);
-    res.status(500).json({ message: 'Error deleting one-shot batch' });
+    return c.json({ message: 'Error deleting one-shot batch' }, 500);
   }
 });
 

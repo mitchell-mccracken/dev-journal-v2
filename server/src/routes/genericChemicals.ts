@@ -1,90 +1,95 @@
-import { Router, Request, Response } from 'express';
-import { GenericChemical } from '../models';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { Hono } from 'hono';
+import { GenericChemical, collection } from '../db/models';
+import { buildInsert, buildUpdate, withDefaults } from '../db/schema';
+import { authenticate, type AuthEnv } from '../middleware/auth';
+import { idParam, readBody } from './body';
 
-const router = Router();
+const router = new Hono<AuthEnv>();
+
+/** MongoDB's duplicate-key error: the name + ratio unique index. */
+const isDuplicateKey = (error: unknown): boolean => (error as { code?: number })?.code === 11000;
 
 // GET /api/generic-chemicals - Get all chemicals for authenticated user
-router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/', authenticate, async (c) => {
   try {
-    const chemicals = await GenericChemical.find({ user: req.user!._id })
-      .sort({ type: 1, name: 1 });
-    res.json({ data: chemicals });
+    const chemicals = await (await collection(GenericChemical))
+      .find({ user: c.get('user')._id })
+      .sort({ type: 1, name: 1 })
+      .toArray();
+    return c.json({ data: chemicals.map((chemical) => withDefaults(GenericChemical, chemical)) });
   } catch (error) {
     console.error('Error fetching chemicals:', error);
-    res.status(500).json({ message: 'Error fetching chemicals' });
+    return c.json({ message: 'Error fetching chemicals' }, 500);
   }
 });
 
 // POST /api/generic-chemicals - Create a new chemical
-router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', authenticate, async (c) => {
   try {
-    const { name, ratio, type, expirationDate, notes } = req.body;
-    
-    const chemical = await GenericChemical.create({
+    const { name, ratio, type, expirationDate, notes } = await readBody(c);
+
+    const chemical = await buildInsert(GenericChemical, {
       name,
       ratio,
       type,
       expirationDate,
       notes,
-      user: req.user!._id,
+      user: c.get('user')._id,
     });
-    
-    res.status(201).json({ data: chemical });
-  } catch (error: any) {
+    await (await collection(GenericChemical)).insertOne(chemical);
+
+    return c.json({ data: chemical }, 201);
+  } catch (error) {
     console.error('Error creating chemical:', error);
-    if (error.code === 11000) {
-      res.status(400).json({ message: 'Chemical with this name and ratio already exists' });
-    } else {
-      res.status(500).json({ message: 'Error creating chemical' });
+    if (isDuplicateKey(error)) {
+      return c.json({ message: 'Chemical with this name and ratio already exists' }, 400);
     }
+    return c.json({ message: 'Error creating chemical' }, 500);
   }
 });
 
 // PUT /api/generic-chemicals/:id - Update a chemical
-router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/:id', authenticate, async (c) => {
   try {
-    const { name, ratio, type, expirationDate, notes } = req.body;
-    
-    const chemical = await GenericChemical.findOneAndUpdate(
-      { _id: req.params.id, user: req.user!._id },
-      { name, ratio, type, expirationDate, notes },
-      { new: true, runValidators: true }
-    );
-    
+    const { name, ratio, type, expirationDate, notes } = await readBody(c);
+
+    const update = await buildUpdate(GenericChemical, { name, ratio, type, expirationDate, notes });
+    const _id = idParam(c);
+    const chemical =
+      _id &&
+      (await (await collection(GenericChemical)).findOneAndUpdate({ _id, user: c.get('user')._id }, update, {
+        returnDocument: 'after',
+      }));
+
     if (!chemical) {
-      res.status(404).json({ message: 'Chemical not found' });
-      return;
+      return c.json({ message: 'Chemical not found' }, 404);
     }
-    
-    res.json({ data: chemical });
-  } catch (error: any) {
+
+    return c.json({ data: withDefaults(GenericChemical, chemical) });
+  } catch (error) {
     console.error('Error updating chemical:', error);
-    if (error.code === 11000) {
-      res.status(400).json({ message: 'Chemical with this name and ratio already exists' });
-    } else {
-      res.status(500).json({ message: 'Error updating chemical' });
+    if (isDuplicateKey(error)) {
+      return c.json({ message: 'Chemical with this name and ratio already exists' }, 400);
     }
+    return c.json({ message: 'Error updating chemical' }, 500);
   }
 });
 
 // DELETE /api/generic-chemicals/:id - Delete a chemical
-router.delete('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+router.delete('/:id', authenticate, async (c) => {
   try {
-    const chemical = await GenericChemical.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user!._id,
-    });
-    
+    const _id = idParam(c);
+    const chemical =
+      _id && (await (await collection(GenericChemical)).findOneAndDelete({ _id, user: c.get('user')._id }));
+
     if (!chemical) {
-      res.status(404).json({ message: 'Chemical not found' });
-      return;
+      return c.json({ message: 'Chemical not found' }, 404);
     }
-    
-    res.json({ message: 'Chemical deleted successfully' });
+
+    return c.json({ message: 'Chemical deleted successfully' });
   } catch (error) {
     console.error('Error deleting chemical:', error);
-    res.status(500).json({ message: 'Error deleting chemical' });
+    return c.json({ message: 'Error deleting chemical' }, 500);
   }
 });
 
