@@ -1,89 +1,97 @@
-import { Router, Response } from 'express';
-import { FilmStock } from '../models';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { Hono } from 'hono';
+import { FilmStock, collection } from '../db/models';
+import { buildInsert, buildUpdate, withDefaults } from '../db/schema';
+import { authenticate, type AuthEnv } from '../middleware/auth';
+import { idParam, readBody } from './body';
 
-const router = Router();
+const router = new Hono<AuthEnv>();
 
 // All routes require authentication
 router.use(authenticate);
 
 // GET /api/film-stocks - Get all film stocks for user
-router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/', async (c) => {
   try {
-    const filmStocks = await FilmStock.find({ user: req.user!._id }).sort({ make: 1, name: 1 });
-    res.json(filmStocks);
+    const filmStocks = await (await collection(FilmStock))
+      .find({ user: c.get('user')._id })
+      .sort({ make: 1, name: 1 })
+      .toArray();
+    return c.json(filmStocks.map((stock) => withDefaults(FilmStock, stock)));
   } catch (error) {
     console.error('Get film stocks error:', error);
-    res.status(500).json({ message: 'Error fetching film stocks' });
+    return c.json({ message: 'Error fetching film stocks' }, 500);
   }
 });
 
 // GET /api/film-stocks/:id - Get single film stock
-router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/:id', async (c) => {
   try {
-    const filmStock = await FilmStock.findOne({ _id: req.params.id, user: req.user!._id });
+    const _id = idParam(c);
+    const filmStock = _id && (await (await collection(FilmStock)).findOne({ _id, user: c.get('user')._id }));
     if (!filmStock) {
-      res.status(404).json({ message: 'Film stock not found' });
-      return;
+      return c.json({ message: 'Film stock not found' }, 404);
     }
-    res.json(filmStock);
+    return c.json(withDefaults(FilmStock, filmStock));
   } catch (error) {
     console.error('Get film stock error:', error);
-    res.status(500).json({ message: 'Error fetching film stock' });
+    return c.json({ message: 'Error fetching film stock' }, 500);
   }
 });
 
 // POST /api/film-stocks - Create film stock
-router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', async (c) => {
   try {
-    const { make, name, iso, format, type } = req.body;
-    const filmStock = await FilmStock.create({
+    const { make, name, iso, format, type } = await readBody(c);
+    const filmStock = await buildInsert(FilmStock, {
       make,
       name,
       iso,
       format,
       type,
-      user: req.user!._id,
+      user: c.get('user')._id,
     });
-    res.status(201).json(filmStock);
+    await (await collection(FilmStock)).insertOne(filmStock);
+    return c.json(filmStock, 201);
   } catch (error) {
     console.error('Create film stock error:', error);
-    res.status(500).json({ message: 'Error creating film stock' });
+    return c.json({ message: 'Error creating film stock' }, 500);
   }
 });
 
 // PUT /api/film-stocks/:id - Update film stock
-router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/:id', async (c) => {
   try {
-    const { make, name, iso, format, type } = req.body;
-    const filmStock = await FilmStock.findOneAndUpdate(
-      { _id: req.params.id, user: req.user!._id },
-      { make, name, iso, format, type },
-      { new: true, runValidators: true }
-    );
+    const { make, name, iso, format, type } = await readBody(c);
+    const update = await buildUpdate(FilmStock, { make, name, iso, format, type });
+    const _id = idParam(c);
+    const filmStock =
+      _id &&
+      (await (await collection(FilmStock)).findOneAndUpdate({ _id, user: c.get('user')._id }, update, {
+        returnDocument: 'after',
+      }));
     if (!filmStock) {
-      res.status(404).json({ message: 'Film stock not found' });
-      return;
+      return c.json({ message: 'Film stock not found' }, 404);
     }
-    res.json(filmStock);
+    return c.json(withDefaults(FilmStock, filmStock));
   } catch (error) {
     console.error('Update film stock error:', error);
-    res.status(500).json({ message: 'Error updating film stock' });
+    return c.json({ message: 'Error updating film stock' }, 500);
   }
 });
 
 // DELETE /api/film-stocks/:id - Delete film stock
-router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.delete('/:id', async (c) => {
   try {
-    const filmStock = await FilmStock.findOneAndDelete({ _id: req.params.id, user: req.user!._id });
+    const _id = idParam(c);
+    const filmStock =
+      _id && (await (await collection(FilmStock)).findOneAndDelete({ _id, user: c.get('user')._id }));
     if (!filmStock) {
-      res.status(404).json({ message: 'Film stock not found' });
-      return;
+      return c.json({ message: 'Film stock not found' }, 404);
     }
-    res.json({ message: 'Film stock deleted' });
+    return c.json({ message: 'Film stock deleted' });
   } catch (error) {
     console.error('Delete film stock error:', error);
-    res.status(500).json({ message: 'Error deleting film stock' });
+    return c.json({ message: 'Error deleting film stock' }, 500);
   }
 });
 

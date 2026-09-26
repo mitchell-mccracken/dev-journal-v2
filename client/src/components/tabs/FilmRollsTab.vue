@@ -55,10 +55,23 @@
               :items="statusOptions"
               item-title="label"
               item-value="value"
+              placeholder="All statuses"
+              persistent-placeholder
+              multiple
+              clearable
               density="compact"
               variant="outlined"
               hide-details
-            />
+            >
+              <template #selection="{ item, index }">
+                <v-chip v-if="index === 0" size="small" :color="getStatusColor(item.value)">
+                  {{ item.title }}
+                </v-chip>
+                <span v-else-if="index === 1" class="text-caption text-grey ml-1">
+                  +{{ filterStatus.length - 1 }}
+                </span>
+              </template>
+            </v-select>
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-select
@@ -67,10 +80,21 @@
               :items="cameraFilterOptions"
               item-title="label"
               item-value="value"
+              placeholder="All cameras"
+              persistent-placeholder
+              multiple
+              clearable
               density="compact"
               variant="outlined"
               hide-details
-            />
+            >
+              <template #selection="{ item, index }">
+                <v-chip v-if="index === 0" size="small">{{ item.title }}</v-chip>
+                <span v-else-if="index === 1" class="text-caption text-grey ml-1">
+                  +{{ filterCamera.length - 1 }}
+                </span>
+              </template>
+            </v-select>
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-select
@@ -79,10 +103,21 @@
               :items="filmStockFilterOptions"
               item-title="label"
               item-value="value"
+              placeholder="All film stocks"
+              persistent-placeholder
+              multiple
+              clearable
               density="compact"
               variant="outlined"
               hide-details
-            />
+            >
+              <template #selection="{ item, index }">
+                <v-chip v-if="index === 0" size="small">{{ item.title }}</v-chip>
+                <span v-else-if="index === 1" class="text-caption text-grey ml-1">
+                  +{{ filterFilmStock.length - 1 }}
+                </span>
+              </template>
+            </v-select>
           </v-col>
           <v-col cols="12" sm="6" md="3">
             <v-select
@@ -274,10 +309,11 @@ const deleteDialogOpen = ref(false);
 const editingRoll = ref<FilmRoll | null>(null);
 const deletingRoll = ref<FilmRoll | null>(null);
 
-// Filters
-const filterCamera = ref<string | null>(null);
-const filterFilmStock = ref<string | null>(null);
-const filterStatus = ref<string>('loaded');
+// Filters (multi-select: an empty array means "all")
+const DEFAULT_STATUSES = ['loaded'];
+const filterCamera = ref<string[]>([]);
+const filterFilmStock = ref<string[]>([]);
+const filterStatus = ref<string[]>([...DEFAULT_STATUSES]);
 type DateRange = 'year' | '6months' | 'all' | 'custom';
 const filterDateRange = ref<DateRange>('year');
 const filterDateFrom = ref<string>('');
@@ -285,7 +321,6 @@ const filterDateTo = ref<string>('');
 const filtersExpanded = ref(false);
 
 const statusOptions = [
-  { label: 'All statuses', value: 'all' },
   { label: 'Loaded', value: 'loaded' },
   { label: 'Shot', value: 'shot' },
   { label: 'Developed', value: 'developed' },
@@ -299,29 +334,33 @@ const dateRangeOptions = [
   { label: 'Custom', value: 'custom' },
 ];
 
-const cameraFilterOptions = computed(() => [
-  { label: 'All cameras', value: null },
-  ...cameras.value.map(c => ({ label: c.displayName, value: c._id })),
-]);
+const cameraFilterOptions = computed(() =>
+  cameras.value.map(c => ({ label: c.displayName, value: c._id }))
+);
 
-const filmStockFilterOptions = computed(() => [
-  { label: 'All film stocks', value: null },
-  ...filmStocks.value.map(s => ({ label: s.displayName, value: s._id })),
-]);
+const filmStockFilterOptions = computed(() =>
+  filmStocks.value.map(s => ({ label: s.displayName, value: s._id }))
+);
 
+const isDefaultStatus = computed(() =>
+  filterStatus.value.length === DEFAULT_STATUSES.length &&
+  DEFAULT_STATUSES.every(s => filterStatus.value.includes(s))
+);
+
+// Number of filter fields changed from their defaults
 const activeFilterCount = computed(() => {
   let n = 0;
-  if (filterCamera.value) n++;
-  if (filterFilmStock.value) n++;
-  if (filterStatus.value !== 'loaded') n++;
+  if (filterCamera.value.length) n++;
+  if (filterFilmStock.value.length) n++;
+  if (!isDefaultStatus.value) n++;
   if (filterDateRange.value !== 'year') n++;
   return n;
 });
 
 const clearFilters = () => {
-  filterCamera.value = null;
-  filterFilmStock.value = null;
-  filterStatus.value = 'loaded';
+  filterCamera.value = [];
+  filterFilmStock.value = [];
+  filterStatus.value = [...DEFAULT_STATUSES];
   filterDateRange.value = 'year';
   filterDateFrom.value = '';
   filterDateTo.value = '';
@@ -360,9 +399,9 @@ const filteredRolls = computed(() => {
   const from = dateCutoff();
   const to = dateUpperBound();
   return rolls.value.filter((r) => {
-    if (filterCamera.value && r.camera?._id !== filterCamera.value) return false;
-    if (filterFilmStock.value && r.filmStock?._id !== filterFilmStock.value) return false;
-    if (filterStatus.value !== 'all' && r.status !== filterStatus.value) return false;
+    if (filterCamera.value.length && !filterCamera.value.includes(r.camera?._id ?? '')) return false;
+    if (filterFilmStock.value.length && !filterFilmStock.value.includes(r.filmStock?._id ?? '')) return false;
+    if (filterStatus.value.length && !filterStatus.value.includes(r.status)) return false;
     const created = new Date(r.createdAt);
     if (from && created < from) return false;
     if (to && created > to) return false;

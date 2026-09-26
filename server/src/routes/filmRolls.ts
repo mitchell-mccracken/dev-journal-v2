@@ -1,57 +1,57 @@
-import { Router, Response } from 'express';
-import { FilmRoll } from '../models';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { Hono } from 'hono';
+import { FilmRoll, collection } from '../db/models';
+import { populateRolls } from '../db/populate';
+import { buildInsert, buildUpdate, withDefaults, type Doc } from '../db/schema';
+import { authenticate, type AuthEnv } from '../middleware/auth';
+import { idParam, readBody } from './body';
 
-const router = Router();
+const router = new Hono<AuthEnv>();
 
 // All routes require authentication
 router.use(authenticate);
 
 // GET /api/film-rolls - Get all film rolls for user
-router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/', async (c) => {
   try {
-    const { status } = req.query;
-    const query: any = { user: req.user!._id };
-    
-    if (status) {
-      query.status = status;
+    const statuses = c.req.queries('status') ?? [];
+    const query: Doc = { user: c.get('user')._id };
+
+    if (statuses.length > 1) {
+      query.status = { $in: statuses };
+    } else if (statuses[0]) {
+      query.status = statuses[0];
     }
 
-    const filmRolls = await FilmRoll.find(query)
-      .populate('filmStock')
-      .populate('camera')
-      .populate('chemicalBatch')
-      .sort({ createdAt: -1 });
-    res.json(filmRolls);
+    const filmRolls = await (await collection(FilmRoll)).find(query).sort({ createdAt: -1 }).toArray();
+    return c.json(await populateRolls(filmRolls.map((roll) => withDefaults(FilmRoll, roll))));
   } catch (error) {
     console.error('Get film rolls error:', error);
-    res.status(500).json({ message: 'Error fetching film rolls' });
+    return c.json({ message: 'Error fetching film rolls' }, 500);
   }
 });
 
 // GET /api/film-rolls/:id - Get single film roll
-router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/:id', async (c) => {
   try {
-    const filmRoll = await FilmRoll.findOne({ _id: req.params.id, user: req.user!._id })
-      .populate('filmStock')
-      .populate('camera')
-      .populate('chemicalBatch');
+    const _id = idParam(c);
+    const filmRoll = _id && (await (await collection(FilmRoll)).findOne({ _id, user: c.get('user')._id }));
     if (!filmRoll) {
-      res.status(404).json({ message: 'Film roll not found' });
-      return;
+      return c.json({ message: 'Film roll not found' }, 404);
     }
-    res.json(filmRoll);
+    const [populated] = await populateRolls([withDefaults(FilmRoll, filmRoll)]);
+    return c.json(populated);
   } catch (error) {
     console.error('Get film roll error:', error);
-    res.status(500).json({ message: 'Error fetching film roll' });
+    return c.json({ message: 'Error fetching film roll' }, 500);
   }
 });
 
 // POST /api/film-rolls - Create film roll
-router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', async (c) => {
   try {
-    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } = req.body;
-    const filmRoll = await FilmRoll.create({
+    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } =
+      await readBody(c);
+    const filmRoll = await buildInsert(FilmRoll, {
       filmStock,
       camera: camera || null,
       chemicalBatch: chemicalBatch || null,
@@ -61,60 +61,65 @@ router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
       status,
       countAsFullRoll,
       notes,
-      user: req.user!._id,
+      user: c.get('user')._id,
     });
-    
-    const populated = await filmRoll.populate(['filmStock', 'camera', 'chemicalBatch']);
-    res.status(201).json(populated);
+    await (await collection(FilmRoll)).insertOne(filmRoll);
+
+    const [populated] = await populateRolls([filmRoll]);
+    return c.json(populated, 201);
   } catch (error) {
     console.error('Create film roll error:', error);
-    res.status(500).json({ message: 'Error creating film roll' });
+    return c.json({ message: 'Error creating film roll' }, 500);
   }
 });
 
 // PUT /api/film-rolls/:id - Update film roll
-router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/:id', async (c) => {
   try {
-    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } = req.body;
-    const filmRoll = await FilmRoll.findOneAndUpdate(
-      { _id: req.params.id, user: req.user!._id },
-      { 
-        filmStock, 
-        camera: camera || null,
-        chemicalBatch: chemicalBatch || null,
-        dateLoaded, 
-        dateFinished, 
-        frameCount, 
-        status,
-        countAsFullRoll,
-        notes 
-      },
-      { new: true, runValidators: true }
-    ).populate(['filmStock', 'camera', 'chemicalBatch']);
-    
+    const { filmStock, camera, chemicalBatch, dateLoaded, dateFinished, frameCount, status, countAsFullRoll, notes } =
+      await readBody(c);
+    const update = await buildUpdate(FilmRoll, {
+      filmStock,
+      camera: camera || null,
+      chemicalBatch: chemicalBatch || null,
+      dateLoaded,
+      dateFinished,
+      frameCount,
+      status,
+      countAsFullRoll,
+      notes,
+    });
+    const _id = idParam(c);
+    const filmRoll =
+      _id &&
+      (await (await collection(FilmRoll)).findOneAndUpdate({ _id, user: c.get('user')._id }, update, {
+        returnDocument: 'after',
+      }));
+
     if (!filmRoll) {
-      res.status(404).json({ message: 'Film roll not found' });
-      return;
+      return c.json({ message: 'Film roll not found' }, 404);
     }
-    res.json(filmRoll);
+    const [populated] = await populateRolls([withDefaults(FilmRoll, filmRoll)]);
+    return c.json(populated);
   } catch (error) {
     console.error('Update film roll error:', error);
-    res.status(500).json({ message: 'Error updating film roll' });
+    return c.json({ message: 'Error updating film roll' }, 500);
   }
 });
 
 // DELETE /api/film-rolls/:id - Delete film roll
-router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.delete('/:id', async (c) => {
   try {
-    const filmRoll = await FilmRoll.findOneAndDelete({ _id: req.params.id, user: req.user!._id });
+    const _id = idParam(c);
+    const filmRoll =
+      _id && (await (await collection(FilmRoll)).findOneAndDelete({ _id, user: c.get('user')._id }));
     if (!filmRoll) {
-      res.status(404).json({ message: 'Film roll not found' });
-      return;
+      return c.json({ message: 'Film roll not found' }, 404);
     }
-    res.json({ message: 'Film roll deleted' });
+    return c.json({ message: 'Film roll deleted' });
   } catch (error) {
     console.error('Delete film roll error:', error);
-    res.status(500).json({ message: 'Error deleting film roll' });
+    return c.json({ message: 'Error deleting film roll' }, 500);
   }
 });
 

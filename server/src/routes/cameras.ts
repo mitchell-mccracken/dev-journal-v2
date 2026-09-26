@@ -1,88 +1,95 @@
-import { Router, Response } from 'express';
-import { Camera } from '../models';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { Hono } from 'hono';
+import { Camera, collection } from '../db/models';
+import { buildInsert, buildUpdate, withDefaults } from '../db/schema';
+import { authenticate, type AuthEnv } from '../middleware/auth';
+import { idParam, readBody } from './body';
 
-const router = Router();
+const router = new Hono<AuthEnv>();
 
 // All routes require authentication
 router.use(authenticate);
 
 // GET /api/cameras - Get all cameras for user
-router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/', async (c) => {
   try {
-    const cameras = await Camera.find({ user: req.user!._id }).sort({ make: 1, name: 1 });
-    res.json(cameras);
+    const cameras = await (await collection(Camera))
+      .find({ user: c.get('user')._id })
+      .sort({ make: 1, name: 1 })
+      .toArray();
+    return c.json(cameras.map((camera) => withDefaults(Camera, camera)));
   } catch (error) {
     console.error('Get cameras error:', error);
-    res.status(500).json({ message: 'Error fetching cameras' });
+    return c.json({ message: 'Error fetching cameras' }, 500);
   }
 });
 
 // GET /api/cameras/:id - Get single camera
-router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.get('/:id', async (c) => {
   try {
-    const camera = await Camera.findOne({ _id: req.params.id, user: req.user!._id });
+    const _id = idParam(c);
+    const camera = _id && (await (await collection(Camera)).findOne({ _id, user: c.get('user')._id }));
     if (!camera) {
-      res.status(404).json({ message: 'Camera not found' });
-      return;
+      return c.json({ message: 'Camera not found' }, 404);
     }
-    res.json(camera);
+    return c.json(withDefaults(Camera, camera));
   } catch (error) {
     console.error('Get camera error:', error);
-    res.status(500).json({ message: 'Error fetching camera' });
+    return c.json({ message: 'Error fetching camera' }, 500);
   }
 });
 
 // POST /api/cameras - Create camera
-router.post('/', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/', async (c) => {
   try {
-    const { make, name, format, notes } = req.body;
-    const camera = await Camera.create({
+    const { make, name, format, notes } = await readBody(c);
+    const camera = await buildInsert(Camera, {
       make,
       name,
       format,
       notes,
-      user: req.user!._id,
+      user: c.get('user')._id,
     });
-    res.status(201).json(camera);
+    await (await collection(Camera)).insertOne(camera);
+    return c.json(camera, 201);
   } catch (error) {
     console.error('Create camera error:', error);
-    res.status(500).json({ message: 'Error creating camera' });
+    return c.json({ message: 'Error creating camera' }, 500);
   }
 });
 
 // PUT /api/cameras/:id - Update camera
-router.put('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.put('/:id', async (c) => {
   try {
-    const { make, name, format, notes } = req.body;
-    const camera = await Camera.findOneAndUpdate(
-      { _id: req.params.id, user: req.user!._id },
-      { make, name, format, notes },
-      { new: true, runValidators: true }
-    );
+    const { make, name, format, notes } = await readBody(c);
+    const update = await buildUpdate(Camera, { make, name, format, notes });
+    const _id = idParam(c);
+    const camera =
+      _id &&
+      (await (await collection(Camera)).findOneAndUpdate({ _id, user: c.get('user')._id }, update, {
+        returnDocument: 'after',
+      }));
     if (!camera) {
-      res.status(404).json({ message: 'Camera not found' });
-      return;
+      return c.json({ message: 'Camera not found' }, 404);
     }
-    res.json(camera);
+    return c.json(withDefaults(Camera, camera));
   } catch (error) {
     console.error('Update camera error:', error);
-    res.status(500).json({ message: 'Error updating camera' });
+    return c.json({ message: 'Error updating camera' }, 500);
   }
 });
 
 // DELETE /api/cameras/:id - Delete camera
-router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+router.delete('/:id', async (c) => {
   try {
-    const camera = await Camera.findOneAndDelete({ _id: req.params.id, user: req.user!._id });
+    const _id = idParam(c);
+    const camera = _id && (await (await collection(Camera)).findOneAndDelete({ _id, user: c.get('user')._id }));
     if (!camera) {
-      res.status(404).json({ message: 'Camera not found' });
-      return;
+      return c.json({ message: 'Camera not found' }, 404);
     }
-    res.json({ message: 'Camera deleted' });
+    return c.json({ message: 'Camera deleted' });
   } catch (error) {
     console.error('Delete camera error:', error);
-    res.status(500).json({ message: 'Error deleting camera' });
+    return c.json({ message: 'Error deleting camera' }, 500);
   }
 });
 
