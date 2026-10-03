@@ -195,13 +195,13 @@
               >
                 <v-card variant="outlined">
                   <img
-                    :src="photo.dataUrl"
+                    :src="photo.url"
                     :alt="photo.filename"
                     style="width: 100%; display: block; object-fit: contain;"
                   />
                   <v-card-actions v-if="!mobile" class="pa-1 justify-center">
                     <v-btn
-                      :href="photo.dataUrl"
+                      :href="photo.url"
                       :download="photo.filename"
                       size="small"
                       variant="text"
@@ -229,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, onBeforeUnmount } from 'vue';
 import { useDisplay } from 'vuetify';
 
 const display = useDisplay();
@@ -272,7 +272,7 @@ const calculateTimes = () => {
 // ── Photo Border & Resize Tool ──────────────────────────────────────────────
 
 interface ProcessedPhoto {
-  dataUrl: string;
+  url: string;
   filename: string;
 }
 
@@ -285,53 +285,68 @@ const isProcessing = ref(false);
 const processingProgress = ref(0);
 
 const onFilesChanged = () => {
-  processedPhotos.value = [];
+  releaseProcessedPhotos();
 };
 
 const clearPhotoTool = () => {
   photoFiles.value = [];
-  processedPhotos.value = [];
+  releaseProcessedPhotos();
   processingProgress.value = 0;
 };
 
-/** Load a File into an HTMLImageElement, wrapped in a Promise. */
-const loadImage = (file: File): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
+/** Revoke the object URLs backing processed photos so their blobs can be freed. */
+const releaseProcessedPhotos = () => {
+  for (const photo of processedPhotos.value) URL.revokeObjectURL(photo.url);
+  processedPhotos.value = [];
 };
 
-/** Process a single image on an offscreen canvas, wrapped in a Promise. */
-const processImage = (img: HTMLImageElement, mode: 'border' | 'resize', percent: number): Promise<string> => {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d')!;
+onBeforeUnmount(releaseProcessedPhotos);
 
+/** Decode a File into an ImageBitmap (respecting EXIF orientation). */
+const loadImage = async (file: File): Promise<ImageBitmap> => {
+  try {
+    return await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    // Older WebKit doesn't accept the options bag
+    return createImageBitmap(file);
+  }
+};
+
+/** Process a single image on an offscreen canvas and return it as a JPEG Blob. */
+const processImage = async (img: ImageBitmap, mode: 'border' | 'resize', percent: number): Promise<Blob> => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+
+  try {
     if (mode === 'resize') {
       const scale = percent / 100;
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     } else {
       // Border: base px on longest edge
-      const longestEdge = Math.max(img.naturalWidth, img.naturalHeight);
+      const longestEdge = Math.max(img.width, img.height);
       const borderPx = Math.round(longestEdge * (percent / 100));
-      canvas.width = img.naturalWidth + borderPx * 2;
-      canvas.height = img.naturalHeight + borderPx * 2;
+      canvas.width = img.width + borderPx * 2;
+      canvas.height = img.height + borderPx * 2;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, borderPx, borderPx, img.naturalWidth, img.naturalHeight);
+      ctx.drawImage(img, borderPx, borderPx, img.width, img.height);
     }
 
-    resolve(canvas.toDataURL('image/jpeg', 0.95));
-  });
+    // toBlob encodes asynchronously and avoids a huge base64 string in memory
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode image'))),
+        'image/jpeg',
+        0.95,
+      );
+    });
+  } finally {
+    // iOS WebKit caps total canvas memory and frees it lazily; release it now
+    canvas.width = 0;
+    canvas.height = 0;
+  }
 };
 
 const processPhotos = async () => {
@@ -339,29 +354,36 @@ const processPhotos = async () => {
 
   isProcessing.value = true;
   processingProgress.value = 0;
-  processedPhotos.value = [];
+  releaseProcessedPhotos();
 
   const files = photoFiles.value;
   const mode = photoMode.value;
   const percent = mode === 'border' ? borderPercent.value : resizePercent.value;
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
-    // Yield to the event loop between each image to keep the UI responsive
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      // Yield to the event loop between each image to keep the UI responsive
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    const img = await loadImage(file);
-    const dataUrl = await processImage(img, mode, percent);
+      const img = await loadImage(file);
+      let blob: Blob;
+      try {
+        blob = await processImage(img, mode, percent);
+      } finally {
+        img.close();
+      }
 
-    const baseName = file.name.replace(/\.[^/.]+$/, '');
-    const filename = `${baseName}_${mode}.jpg`;
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      const filename = `${baseName}_${mode}.jpg`;
 
-    processedPhotos.value.push({ dataUrl, filename });
-    processingProgress.value = Math.round(((i + 1) / files.length) * 100);
+      processedPhotos.value.push({ url: URL.createObjectURL(blob), filename });
+      processingProgress.value = Math.round(((i + 1) / files.length) * 100);
+    }
+  } finally {
+    isProcessing.value = false;
   }
-
-  isProcessing.value = false;
 };
 
 // ── Expose refresh ──────────────────────────────────────────────────────────
