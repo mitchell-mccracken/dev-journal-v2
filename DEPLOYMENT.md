@@ -59,7 +59,7 @@ field that isn't there is dropped from creates and updates, as before.
 
 - [ ] Merge to `main` and push.
 - [ ] **Cloudflare** builds and deploys automatically from `main`. Check the
-      build under Workers & Pages → `dev-journal` → Deployments.
+      build under Workers & Pages → `dev-journal-v2` → Deployments.
 - [ ] **Heroku**: if the app is connected to GitHub with automatic deploys, the
       merge deploys it. Otherwise:
       ```bash
@@ -92,7 +92,7 @@ sign in.
       heroku config:set JWT_EXPIRES_IN=30d
       ```
       Restarts the dyno for you.
-- [ ] **Cloudflare**: Workers & Pages → `dev-journal` → Settings → Variables and
+- [ ] **Cloudflare**: Workers & Pages → `dev-journal-v2` → Settings → Variables and
       Secrets. Add each as type **Secret**, not Text. Or from the terminal:
       ```bash
       npx wrangler secret put JWT_SECRET

@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "dev-journal",
+  "name": "dev-journal-v2",
   // The same Hono API that runs on Heroku (server/src/app.ts), plus the static
   // client build.
   "main": "./server/src/worker.ts",
