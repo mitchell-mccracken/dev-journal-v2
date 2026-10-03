@@ -180,11 +180,21 @@
         <v-expand-transition>
           <div v-if="processedPhotos.length > 0">
             <v-divider class="mb-4" />
-            <p class="text-body-2 text-medium-emphasis mb-3">
-              {{ processedPhotos.length }} image{{ processedPhotos.length > 1 ? 's' : '' }} processed —
-              <span v-if="!mobile">click the download button to save</span>
-              <span v-else>long-press an image to save</span>
-            </p>
+            <div class="d-flex flex-wrap align-center justify-space-between ga-2 mb-3">
+              <p class="text-body-2 text-medium-emphasis">
+                {{ processedPhotos.length }} image{{ processedPhotos.length > 1 ? 's' : '' }} processed
+              </p>
+              <v-btn
+                v-if="canShareFiles && processedPhotos.length > 1"
+                color="primary"
+                variant="tonal"
+                :size="mobile ? 'small' : 'default'"
+                @click="saveAllPhotos"
+              >
+                <v-icon start>mdi-download-multiple</v-icon>
+                Save All
+              </v-btn>
+            </div>
             <v-row>
               <v-col
                 v-for="photo in processedPhotos"
@@ -194,19 +204,18 @@
                 md="3"
               >
                 <v-card variant="outlined">
+                  <!-- Small preview only: full-res <img>s exhaust iOS memory -->
                   <img
-                    :src="photo.url"
+                    :src="photo.thumbUrl"
                     :alt="photo.filename"
                     style="width: 100%; display: block; object-fit: contain;"
                   />
-                  <v-card-actions v-if="!mobile" class="pa-1 justify-center">
+                  <v-card-actions class="pa-1 justify-center">
                     <v-btn
-                      :href="photo.url"
-                      :download="photo.filename"
                       size="small"
                       variant="text"
                       color="primary"
-                      tag="a"
+                      @click="savePhoto(photo)"
                     >
                       <v-icon start>mdi-download</v-icon>
                       Save
@@ -229,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onBeforeUnmount } from 'vue';
+import { ref, shallowRef, reactive, computed, onBeforeUnmount } from 'vue';
 import { useDisplay } from 'vuetify';
 
 const display = useDisplay();
@@ -272,15 +281,19 @@ const calculateTimes = () => {
 // ── Photo Border & Resize Tool ──────────────────────────────────────────────
 
 interface ProcessedPhoto {
-  url: string;
+  file: File;
+  thumbUrl: string;
   filename: string;
 }
+
+const THUMBNAIL_MAX_EDGE = 600;
 
 const photoFiles = ref<File[]>([]);
 const photoMode = ref<'border' | 'resize'>('border');
 const borderPercent = ref<number>(3);
 const resizePercent = ref<number>(50);
-const processedPhotos = ref<ProcessedPhoto[]>([]);
+// shallowRef: no need for Vue to proxy File objects
+const processedPhotos = shallowRef<ProcessedPhoto[]>([]);
 const isProcessing = ref(false);
 const processingProgress = ref(0);
 
@@ -296,9 +309,41 @@ const clearPhotoTool = () => {
 
 /** Revoke the object URLs backing processed photos so their blobs can be freed. */
 const releaseProcessedPhotos = () => {
-  for (const photo of processedPhotos.value) URL.revokeObjectURL(photo.url);
+  for (const photo of processedPhotos.value) URL.revokeObjectURL(photo.thumbUrl);
   processedPhotos.value = [];
 };
+
+// iOS Safari: the share sheet offers "Save Image(s)" straight to Photos
+const canShareFiles = computed(() => {
+  if (!mobile.value || typeof navigator.canShare !== 'function') return false;
+  const probe = new File([new Uint8Array(1)], 'probe.jpg', { type: 'image/jpeg' });
+  return navigator.canShare({ files: [probe] });
+});
+
+const shareFiles = async (files: File[]) => {
+  try {
+    await navigator.share({ files });
+  } catch (err) {
+    // AbortError just means the user closed the share sheet
+    if ((err as DOMException)?.name !== 'AbortError') console.error('Share failed', err);
+  }
+};
+
+const downloadFile = (file: File) => {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const savePhoto = (photo: ProcessedPhoto) => {
+  if (canShareFiles.value) shareFiles([photo.file]);
+  else downloadFile(photo.file);
+};
+
+const saveAllPhotos = () => shareFiles(processedPhotos.value.map((p) => p.file));
 
 onBeforeUnmount(releaseProcessedPhotos);
 
@@ -312,26 +357,37 @@ const loadImage = async (file: File): Promise<ImageBitmap> => {
   }
 };
 
-/** Process a single image on an offscreen canvas and return it as a JPEG Blob. */
-const processImage = async (img: ImageBitmap, mode: 'border' | 'resize', percent: number): Promise<Blob> => {
+/**
+ * Process a single image on an offscreen canvas and return it as a JPEG Blob.
+ * maxEdge caps the output's longest edge (used for thumbnails).
+ */
+const processImage = async (
+  img: ImageBitmap,
+  mode: 'border' | 'resize',
+  percent: number,
+  maxEdge = Infinity,
+): Promise<Blob> => {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
 
   try {
     if (mode === 'resize') {
-      const scale = percent / 100;
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
+      const outW = img.width * (percent / 100);
+      const outH = img.height * (percent / 100);
+      const fit = Math.min(1, maxEdge / Math.max(outW, outH));
+      canvas.width = Math.round(outW * fit);
+      canvas.height = Math.round(outH * fit);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     } else {
       // Border: base px on longest edge
       const longestEdge = Math.max(img.width, img.height);
       const borderPx = Math.round(longestEdge * (percent / 100));
-      canvas.width = img.width + borderPx * 2;
-      canvas.height = img.height + borderPx * 2;
+      const fit = Math.min(1, maxEdge / (longestEdge + borderPx * 2));
+      canvas.width = Math.round((img.width + borderPx * 2) * fit);
+      canvas.height = Math.round((img.height + borderPx * 2) * fit);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, borderPx, borderPx, img.width, img.height);
+      ctx.drawImage(img, borderPx * fit, borderPx * fit, img.width * fit, img.height * fit);
     }
 
     // toBlob encodes asynchronously and avoids a huge base64 string in memory
@@ -369,8 +425,10 @@ const processPhotos = async () => {
 
       const img = await loadImage(file);
       let blob: Blob;
+      let thumb: Blob;
       try {
         blob = await processImage(img, mode, percent);
+        thumb = await processImage(img, mode, percent, THUMBNAIL_MAX_EDGE);
       } finally {
         img.close();
       }
@@ -378,7 +436,14 @@ const processPhotos = async () => {
       const baseName = file.name.replace(/\.[^/.]+$/, '');
       const filename = `${baseName}_${mode}.jpg`;
 
-      processedPhotos.value.push({ url: URL.createObjectURL(blob), filename });
+      processedPhotos.value = [
+        ...processedPhotos.value,
+        {
+          file: new File([blob], filename, { type: 'image/jpeg' }),
+          thumbUrl: URL.createObjectURL(thumb),
+          filename,
+        },
+      ];
       processingProgress.value = Math.round(((i + 1) / files.length) * 100);
     }
   } finally {
